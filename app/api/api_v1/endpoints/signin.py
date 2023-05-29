@@ -43,7 +43,6 @@ async def get_current_user(
             detail=mssg.get('message'),
             headers={"WWW-Authenticate": "Bearer"}
         )
-        print(user.get('section'))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="User is disabled",
@@ -125,7 +124,7 @@ async def update_current_user(
                 )
     if form.username != None:
         try:
-            find_username = collection.find_one({"username", str(form.username)})
+            find_username = collection.find_one({"username": form.username})
         except Exception as err:
             print(
             {"status": False,

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
-from typing import Any, Union, Optional, Annotated, NewType
+from typing import Any, Union, Optional, Annotated
+from functionTypes.common import FunctionStatus, FunctionReturn
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -16,9 +17,6 @@ from bson.objectid import ObjectId
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
-
-FunctionStatus = NewType('FunctionStatus', dict[str: bool, str: int, str: Union[str, dict]])
-FunctionReturn = NewType('FunctionReturn', dict[str: bool, str: dict])
     
 collection = session['User']
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -108,10 +106,7 @@ def get_password_hash(password: str) -> Union[FunctionStatus, dict]:
         )
     return {"status": True, "content": unhash_password}
 
-def authenticate_user(
-    current_user: str, 
-    password: str
-    ) -> Union[FunctionReturn, FunctionStatus]:
+def authenticate_user(current_user: str, password: str) -> Union[FunctionReturn, FunctionStatus]:
     try:
         form_user: dict = collection.find_one({
             "$or": [{'username' : current_user}, {'email': current_user}]})
@@ -136,9 +131,7 @@ def authenticate_user(
         )
     return {"status": True, "content": form_user}
 
-def get_user(
-    user_id: str
-    ) -> Union[FunctionReturn, FunctionStatus]:
+def get_user(user_id: str) -> Union[FunctionReturn, FunctionStatus]:
     try:
         user: dict = collection.find_one(ObjectId(user_id)) 
     except Exception as e:
@@ -156,9 +149,7 @@ def get_user(
     user.update({'id': str(user.get('_id', None))})
     return {"status": True, "content": user}
 
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)]
-    ) -> Union[FunctionReturn, FunctionStatus]:
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Union[FunctionReturn, FunctionStatus]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         user_id: Union[dict, None] = payload.get("sub", None)
@@ -190,8 +181,7 @@ async def get_current_user(
         ) 
     return {"status": True, "content": user}
 
-async def get_current_active_user(
-    current_user: Annotated[dict, Depends(get_current_user)]) -> Union[FunctionReturn, FunctionStatus]:
+async def get_current_active_user(current_user: Annotated[dict, Depends(get_current_user)]) -> Union[FunctionReturn, FunctionStatus]:
     if not current_user.get('status'):
         return FunctionStatus(
             {"status": False,

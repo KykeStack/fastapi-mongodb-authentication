@@ -1,29 +1,31 @@
 from typing import Generator
+from functionTypes.common import FunctionStatus, FunctionReturn
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt
+from jose import jwt, JWTError
 from pydantic import ValidationError
 
-from app import models, schemas
-from app.core.config import settings
-from app.dataBase.client import session
+from schemas.token import TokenPayload, MagicTokenPayload
+from core.config import settings
+from dataBase.client import session
+
+from pymongo.database import Database
+from bson.objectid import ObjectId
 
 reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/access-token")
 
-
 def get_db() -> Generator:
     try:
-        db = session.connect_to_database()
-        yield db
+        collection = session['User']
+        yield collection
     finally:
-        session.close()
+        session
 
-
-def get_token_payload(token: str) -> schemas.TokenPayload:
+def get_token_payload(token: str) -> TokenPayload:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
-        token_data = schemas.TokenPayload(**payload)
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        token_data = TokenPayload(**payload)
     except (jwt.JWTError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -32,39 +34,50 @@ def get_token_payload(token: str) -> schemas.TokenPayload:
     return token_data
 
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> models.User:
+async def get_current_user(collection: Database = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
     token_data = get_token_payload(token)
+    print(token_data)
     if token_data.refresh or token_data.totp:
         # Refresh token is not a valid access token and TOTP True can only be used to validate TOTP
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = crud.user.get(db, id=token_data.sub)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
-
-
-def get_totp_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> models.User:
-    token_data = get_token_payload(token)
-    if token_data.refresh or not token_data.totp:
-        # Refresh token is not a valid access token and TOTP False cannot be used to validate TOTP
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
-        )
-    user = crud.user.get(db, id=token_data.sub)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
-
-
-def get_magic_token(token: str = Depends(reusable_oauth2)) -> schemas.MagicTokenPayload:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
-        token_data = schemas.MagicTokenPayload(**payload)
-    except (jwt.JWTError, ValidationError):
+        form_user: dict = collection.find_one(ObjectId(token_data.sub))
+    except Exception as e:
+        return FunctionStatus({"status": False, "section": 0, "message": f"Mongodb error: {e}"})
+    finally:
+        if form_user == None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {"status": True, "content" : form_user}
+    
+
+
+# def get_totp_user(collection: Database = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
+#     token_data = get_token_payload(token)
+#     if token_data.refresh or not token_data.totp:
+#         # Refresh token is not a valid access token and TOTP False cannot be used to validate TOTP
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="Could not validate credentials",
+#         )
+#     try:
+#         form_user: dict = collection.find_one(ObjectId(token_data.sub))
+#     except Exception as e:
+#         return FunctionStatus({"status": False, "section": 0, "message": f"Mongodb error: {e}"})
+#     finally:
+#         if form_user == None:
+#             raise HTTPException(status_code=404, detail="User not found")
+#         return {"status": True, "content" : form_user}
+    
+
+def get_magic_token(token: str = Depends(reusable_oauth2)) -> MagicTokenPayload:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        token_data = MagicTokenPayload(**payload)
+        print(token_data)
+    except (JWTError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
@@ -72,19 +85,26 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> schemas.MagicToken
     return token_data
 
 
-def get_refresh_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> models.User:
-    token_data = get_token_payload(token)
-    if not token_data.refresh:
-        # Access token is not a valid refresh token
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
-        )
-    user = crud.user.get(db, id=token_data.sub)
-    if not user:
+# def get_refresh_user(collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
+#     token_data = get_token_payload(token)
+#     if not token_data.refresh:
+#         # Access token is not a valid refresh token
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="Could not validate credentials",
+#         )
+#     form_user: dict = collection.find_one(ObjectId(token_data.sub))
+#     except Exception as e:
+#         return FunctionStatus({"status": False, "section": 0, "message": f"Mongodb error: {e}"})
+
+    if form_user == None:
         raise HTTPException(status_code=404, detail="User not found")
-    if not crud.user.is_active(user):
+    if not form_user.get():
         raise HTTPException(status_code=400, detail="Inactive user")
+    return {"status": True, "content" : form_user}
+
+
+
     # Check and revoke this refresh token
     token_obj = crud.token.get(token=token, user=user)
     if not token_obj or not token_obj.is_valid:
@@ -96,34 +116,34 @@ def get_refresh_user(db: Session = Depends(get_db), token: str = Depends(reusabl
     return user
 
 
-def get_current_active_user(
-    current_user: models.User = Depends(get_current_user),
-) -> models.User:
-    if not crud.user.is_active(current_user):
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+# def get_current_active_user(
+#     current_user: models.User = Depends(get_current_user),
+# ) -> models.User:
+#     if not crud.user.is_active(current_user):
+#         raise HTTPException(status_code=400, detail="Inactive user")
+#     return current_user
 
 
-def get_current_active_superuser(
-    current_user: models.User = Depends(get_current_user),
-) -> models.User:
-    if not crud.user.is_superuser(current_user):
-        raise HTTPException(status_code=400, detail="The user doesn't have enough privileges")
-    return current_user
+# def get_current_active_superuser(
+#     current_user: models.User = Depends(get_current_user),
+# ) -> models.User:
+#     if not crud.user.is_superuser(current_user):
+#         raise HTTPException(status_code=400, detail="The user doesn't have enough privileges")
+#     return current_user
 
 
-def get_active_websocket_user(*, db: Session, token: str) -> models.User:
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
-        token_data = schemas.TokenPayload(**payload)
-    except (jwt.JWTError, ValidationError):
-        raise ValidationError("Could not validate credentials")
-    if token_data.refresh:
-        # Refresh token is not a valid access token
-        raise ValidationError("Could not validate credentials")
-    user = crud.user.get(db, id=token_data.sub)
-    if not user:
-        raise ValidationError("User not found")
-    if not crud.user.is_active(user):
-        raise ValidationError("Inactive user")
-    return user
+# def get_active_websocket_user(*, db: Session, token: str) -> models.User:
+#     try:
+#         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
+#         token_data = schemas.TokenPayload(**payload)
+#     except (jwt.JWTError, ValidationError):
+#         raise ValidationError("Could not validate credentials")
+#     if token_data.refresh:
+#         # Refresh token is not a valid access token
+#         raise ValidationError("Could not validate credentials")
+#     user = crud.user.get(db, id=token_data.sub)
+#     if not user:
+#         raise ValidationError("User not found")
+#     if not crud.user.is_active(user):
+#         raise ValidationError("Inactive user")
+#     return user

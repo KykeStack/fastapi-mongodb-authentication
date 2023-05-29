@@ -1,10 +1,12 @@
-from email_validator import validate_email, EmailNotValidError
-from pydantic import BaseModel, Field, EmailStr, validator
-from localData.Countries import COUNTRIES
-from typing import Annotated, Optional, Union
-from bson.objectid import ObjectId
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, validator, Field
+from typing import Annotated, Optional
+
+from schemas.emails import Email
 from enum import Enum
+
+from localData.Countries import COUNTRIES
+from datetime import datetime
+
 import phonenumbers
 
 
@@ -35,52 +37,48 @@ This class inherits from BaseModel and has a configuration that sets its title t
 """
 
 class FullName(BaseModel):
-    name: Annotated[
-        str, Field(
+    name: Annotated[str, Field(
         title = "User first name",
         description = "Required field",
         max_length = 25, 
         min_length = 2)]  
      
-    secondName: Annotated[
-        Optional[str], Field(
+    secondName: Annotated[Optional[str], Field(
         title = "User second name",
         description = "Optional field",
         max_length = 25,
         min_length=2)] = None
     
-    surname: Annotated[
-        str, Field(
+    surname: Annotated[str, Field(
         title = "User first surname",
         description = "Required field",
         max_length = 25,
         min_length = 2)]  
     
-    secondSurname: Annotated[
-        Optional[str], Field(
+    secondSurname: Annotated[Optional[str], Field(
         title = "User second surname",
         description = "Optional field",
         max_length=25, 
         min_length=2)] = None
         
     @validator("name")
-    def lower_name(cls, value):
+    def lower_name(cls, value: str):
         validate_name = value.lower().capitalize()
         return validate_name
     
     @validator("secondName")
-    def lower_secondName(cls, value):
+    def lower_secondName(cls, value: str):
         if value is not None:
             validate_secondName = value.lower().capitalize()
             return validate_secondName
 
     @validator("surname")
-    def lower_surname(cls, value):
+    def lower_surname(cls, value: str):
         validate_surname = value.lower().capitalize()
         return validate_surname
 
     @validator("secondSurname")
-    def lower_secondSurname(cls, value):
+    def lower_secondSurname(cls, value: str):
         if value is not None:
             validate_secondSurname = value.lower().capitalize()
             return validate_secondSurname
@@ -94,7 +92,7 @@ class OptionalFullName(FullName):
 class UserIn(BaseModel):
     id: str
     username: str
-    email: EmailStr
+    email: Email
     password: Optional[str] = None 
     fullName: FullName
     birthdate: str
@@ -132,7 +130,7 @@ This class inherits from BaseModel and has a configuration that sets its title t
 """
 
 class SignUpFormIn(BaseModel):
-    email: str
+    email: Email
     password: Annotated[ 
         str,
         Field(regex= "((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[\W]).{8,64})")]
@@ -144,26 +142,7 @@ class SignUpFormIn(BaseModel):
     phoneNumber: Optional[str] = None 
     privacyPolicy: Optional[bool] = True
     userExperience: Optional[bool]
-    class Config:
-        eschema_extra = {
-           "example": {
-               "email": "myemail@example.com",
-                "password": "dq,gFg:szwSX{Zl g|",
-                "full_name": {
-                    "name": "John",
-                    "second_name": "Austin",
-                    "surname": "Doe",
-                    "second_surname": "Hesm"
-                },
-                "username": "JohnHesm",
-                "birthdate": "13/12/1998",
-                "gender": "male",
-                "country": "Wallis and Futuna",
-                "phone_number": "+894 65165186151",
-                "privacy_policy": "true",
-                "user_experience": "false"
-            }
-        }
+
     @validator("country")
     def parse_country(cls, value):
          try:
@@ -201,16 +180,6 @@ class SignUpFormIn(BaseModel):
                 pass
         raise ValueError(f"Invalid birthdate: {value}. List of valid formats:{valid_formats}")
     
-    @validator("email")
-    def validate_email(cls, value):
-        valid_email_format = value.lower()
-        try:
-            email_object = validate_email(valid_email_format)
-            valid_email_format = email_object.email
-            return email_object.email
-        except EmailNotValidError as errorMsg:
-            raise errorMsg
-        
     @validator('username')
     def username_alphanumeric(cls, value):
         assert value.isalnum(), 'must be alphanumeric'
