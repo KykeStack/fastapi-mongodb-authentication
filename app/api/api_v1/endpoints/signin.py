@@ -1,3 +1,17 @@
+
+from schemas.user import UserOut, Token, UpdateUserData
+
+from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.security import OAuth2PasswordRequestForm
+
+from functionTypes.common import FunctionStatus
+
+from bson.objectid import ObjectId
+
+from typing import Annotated
+from datetime import datetime
+from dataBase.client import session
+
 from core.security import (
     get_current_active_user, 
     authenticate_user, 
@@ -6,16 +20,6 @@ from core.security import (
     get_password_hash, 
     __cached__
 )
-    
-from schemas.user import UserIn, UserOut, Token, UpdateUserData
-
-from fastapi import Depends, APIRouter, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-
-from typing import Annotated
-from datetime import datetime
-from dataBase.client import session
-
 
 collection = session['User']
 
@@ -32,15 +36,15 @@ Get user data if not disabled
     response_model_exclude_none=True
 )
 async def get_current_user(
-    current_user: Annotated[UserIn, Depends(get_current_active_user)]
+    current_user: Annotated[FunctionStatus, Depends(get_current_active_user)]
     ):
-    user: dict = current_user
-    if not user.get('status'):
-        mssg: dict = user.get('message')
-        if mssg.get('section') == 1:
+    if not current_user.status:
+        print(current_user.message)
+        return_status: FunctionStatus = current_user.message
+        if return_status.section == 1:
             raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail=mssg.get('message'),
+            detail=return_status.message,
             headers={"WWW-Authenticate": "Bearer"}
         )
         raise HTTPException(
@@ -48,7 +52,7 @@ async def get_current_user(
             detail="User is disabled",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    return user.get('content')
+    return current_user.content
 
 """
 Generate a new JWT token
@@ -61,15 +65,15 @@ Generate a new JWT token
 async def signin_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     valid_username = form_data.username.lower()
-    user = authenticate_user(valid_username, form_data.password)
-    if not user.get('status'):
-        print(f"{user.get('section')}, {user.get('message')}")
+    user: FunctionStatus = authenticate_user(valid_username, form_data.password)
+    if not user.status:
+        print(user.message)
         raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password",
                 headers={"WWW-Authenticate": "Bearer"}
             ) 
-    id = str(user.get('content').get('_id'))
+    id: str = user.content.get('_id').__str__()
     access_token = create_access_token(subject=id)
     responce = { "id" : id, "accessToken": access_token, "tokenType": "bearer" }
     return responce
@@ -84,19 +88,19 @@ Update the current user data
     response_model_exclude_none=True
 )
 async def update_current_user(
-    form:  UpdateUserData,
-    current_user_valid: Annotated[UserIn, Depends(get_current_active_user)]
+    form: UpdateUserData,
+    current_user_valid: Annotated[FunctionStatus, Depends(get_current_active_user)]
 ):  
     mssg = HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service Unavailable"
             )
-    if not current_user_valid.get('status'):
+    if not current_user_valid.status:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid User or JWT expire "
         )  
-    current_user: dict = current_user_valid.get('content') 
+    current_user: dict = current_user_valid.content
     valid_data = form.dict(exclude_none=True)
     if not valid_data:
         raise HTTPException(

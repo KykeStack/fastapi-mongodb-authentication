@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Any, Union, Optional, Annotated
-from functionTypes.common import FunctionStatus, FunctionReturn
+from functionTypes.common import FunctionStatus
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -41,7 +41,7 @@ def create_refresh_token(*, subject: Union[str, Any], expires_delta: timedelta =
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(seconds=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
     to_encode = {"exp": expire, "sub": str(subject), "refresh": True}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
@@ -50,7 +50,7 @@ def create_magic_tokens(*, subject: Union[str, Any], expires_delta: timedelta = 
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     fingerprint = str(uuid.uuid4())
     magic_tokens = []
     # First sub is the user.id, to be emailed. Second is the disposable id.
@@ -83,117 +83,65 @@ def verify_totp(*, token: str, secret: str, last_counter: int = None) -> Union[s
     else:
         return match.counter
 
-def verify_password(*, plain_password: str, hashed_password: str) -> Union[FunctionStatus, dict]:
+def verify_password(*, plain_password: str, hashed_password: str) -> FunctionStatus:
     try:
         is_valid_password = pwd_context.verify(plain_password, hashed_password)
-    except Exception as e:
-        return FunctionStatus(
-            {"status": False,
-             "section": 0, 
-             "message": f"CryptContext error: {e}"}
-        )
-    return {"status": True, "content": is_valid_password}
+    except Exception as error:
+        return FunctionStatus(status=False, section=0, message=f"CryptContext error: {error}")
+    return FunctionStatus(status=True, content=is_valid_password)
 
-
-def get_password_hash(password: str) -> Union[FunctionStatus, dict]:
+def get_password_hash(password: str) -> FunctionStatus:
     try:
         unhash_password = pwd_context.hash(password)
-    except Exception as e:
-        return FunctionStatus(
-            {"status": False,
-             "section": 0, 
-             "message": f"CryptContext error: {e}"}
-        )
-    return {"status": True, "content": unhash_password}
+    except Exception as error:
+        return FunctionStatus(status=False, section=0, message=f"CryptContext error: {error}")
+    return FunctionStatus(status=True, content=unhash_password)
 
-def authenticate_user(current_user: str, password: str) -> Union[FunctionReturn, FunctionStatus]:
+def authenticate_user(current_user: str, password: str) -> FunctionStatus:
     try:
-        form_user: dict = collection.find_one({
-            "$or": [{'username' : current_user}, {'email': current_user}]})
-    except Exception as e:
-         return FunctionStatus(
-             {"status": False,
-             "section": 0, 
-             "message": f"Mongodb error: {e}"}
-        )
+        form_user: dict = collection.find_one({"$or": [
+            {'username' : current_user}, {'email': current_user}]})
+    except Exception as error:
+         return FunctionStatus(status=False, section=0, message=f"Mongodb error: {error}")
     if form_user == None:
-        return FunctionStatus(
-            {"status": False,
-            "section": 1, 
-            "message": "User not found in database"}
-        )
-    unhash_password: dict = verify_password(plain_password=password, hashed_password=form_user.get("password"))
-    if not unhash_password.get('content'):
-        return FunctionStatus(
-            {"status": False,
-            "section": 2, 
-            "message": "Invalid user password"}
-        )
-    return {"status": True, "content": form_user}
+        return FunctionStatus(status=False, section=1, message=f"User not found in database")
+    unhash_password: FunctionStatus = verify_password(
+        plain_password=password, hashed_password=form_user.get("password"))
+    if not unhash_password.status:
+        return FunctionStatus(status=False, section=2, message="Invalid user password")
+    return FunctionStatus(status=True, content=form_user)
 
-def get_user(user_id: str) -> Union[FunctionReturn, FunctionStatus]:
+def get_user(by_id: str) -> FunctionStatus:
     try:
-        user: dict = collection.find_one(ObjectId(user_id)) 
-    except Exception as e:
-        return FunctionStatus(
-            {"status": False,
-             "section": 0, 
-            "message": f"Mongodb error: {e}"}
-        )
+        user: dict = collection.find_one(ObjectId(by_id)) 
+    except Exception as error:
+        return FunctionStatus(status=False, section=0, message= f"Mongodb error: {error}")
     if user == None:
-        return FunctionStatus(
-            {"status": False,
-             "section": 1, 
-            "message": f"User not found in database"}
-        )
-    user.update({'id': str(user.get('_id', None))})
-    return {"status": True, "content": user}
+        return FunctionStatus(status=False, section=1, message=f"User not found in database")
+    user.update({'id': str(user.get('_id'))})
+    return FunctionStatus(status=True, content=user)
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Union[FunctionReturn, FunctionStatus]:
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> FunctionStatus:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        user_id: Union[dict, None] = payload.get("sub", None)
+        user_id: dict = payload.get("sub")
         if user_id == None:
-            return FunctionStatus(
-                {"status": False,
-                "section": 0, 
-                "message": "Missing information in JWT"}
-            )
-        # if __cached__.get(user_id) != token:
-        #     return FunctionStatus(
-        #         {"status": False,
-        #         "section": 1, 
-        #         "message": "JWT Token is deprecated"}
-        #     ) 
+            return FunctionStatus(status=False, section=0, message=f"Afther jwt.decode found Security Issues")
+        if __cached__.get(user_id) != token:
+            return FunctionStatus(status=False, section=1, message=f"JWT Token is deprecated")
         token_data: TokenData = TokenData(userId=user_id)
-        user = get_user(user_id=token_data.userId)
-        if not user.get('status'):
-            return FunctionStatus(
-                {"status": False,
-                "section": 3, 
-                "message": user}
-            ) 
-    except JWTError as err:
-        return FunctionStatus(
-            {"status": False,
-                "section": 4, 
-                "message": err}
-        ) 
-    return {"status": True, "content": user}
+        from_get_user: FunctionStatus = get_user(by_id=token_data.userId)
+        if not from_get_user.status:
+            return FunctionStatus(status=False, section=2, message=from_get_user) 
+    except JWTError as error:
+        return FunctionStatus(status=False, section=3, message=f"JWTError: {error}")
+    return FunctionStatus(status=True, content=from_get_user.content)
 
-async def get_current_active_user(current_user: Annotated[dict, Depends(get_current_user)]) -> Union[FunctionReturn, FunctionStatus]:
-    if not current_user.get('status'):
-        return FunctionStatus(
-            {"status": False,
-                "section": 0, 
-                "message": current_user}
-        )
-    user: dict = current_user.get('content').get('content')
-    if user.get('content'):
-        return FunctionStatus(
-            {"status": False,
-                "section": 1, 
-                "message": "User is disabled"}
-        )
-    return {"status": True, "content": user}
+async def get_current_active_user(current_user: Annotated[FunctionStatus, Depends(get_current_user)]) -> FunctionStatus:
+    if not current_user.status:
+        return FunctionStatus(status=False, section=0, message=current_user)
+    user: dict = current_user.content
+    if user.get('disabled'):
+        return FunctionStatus(status=False, section=1, message=f"User is disabled")
+    return  FunctionStatus(status=True, content=user)
 

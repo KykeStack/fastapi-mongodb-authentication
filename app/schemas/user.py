@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Annotated, Optional
 
-from schemas.emails import Email
 from enum import Enum
 
 from localData.Countries import COUNTRIES
@@ -92,7 +91,7 @@ class OptionalFullName(FullName):
 class UserIn(BaseModel):
     id: str
     username: str
-    email: Email
+    email: EmailStr
     password: Optional[str] = None 
     fullName: FullName
     birthdate: str
@@ -130,7 +129,7 @@ This class inherits from BaseModel and has a configuration that sets its title t
 """
 
 class SignUpFormIn(BaseModel):
-    email: Email
+    email: EmailStr
     password: Annotated[ 
         str,
         Field(regex= "((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[\W]).{8,64})")]

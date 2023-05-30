@@ -1,4 +1,8 @@
-from typing import NewType, Union
+from typing import Any, Optional
+from pydantic import BaseModel
 
-FunctionStatus = NewType('FunctionStatus', dict[str: bool, str: int, str: Union[str, dict]])
-FunctionReturn = NewType('FunctionReturn', dict[str: bool, str: any]) #MagicTokenPayload , dict insted of any
+class FunctionStatus(BaseModel):
+    status: bool
+    section: Optional[int] 
+    message: Optional[Any] = None
+    content: Optional[Any] = None

@@ -4,7 +4,9 @@ from fastapi.encoders import jsonable_encoder
 
 from localData.Countries import COUNTRIES
 from dataBase.client import session 
-from core.security import get_password_hash, ObjectId
+
+from core.security import get_password_hash
+
 from datetime import datetime
 
 router = APIRouter()
@@ -96,8 +98,12 @@ async def create_user(form: SignUpFormIn):
         raise mssg
     signup_form = {
         **form.dict(),
-        "password": encrypted_password.get('content'), 
-        "disabled": False, 
+        "password": encrypted_password.get('content'),
+        "emailValidated": False, 
+        "totpSecret": None,
+        "totpCounter": None,
+        "refreshTokens": [],
+        "disabled": False,
         "deleted": False,
         "updatedAt": time,
         "createdAt": time
@@ -110,9 +116,8 @@ async def create_user(form: SignUpFormIn):
                 "section": 3, 
                 "message": err})
         raise mssg
-    signup_form.update({'id':str(ObjectId(responce.inserted_id))}) 
+    signup_form.update({'id': str(responce.inserted_id)}) 
     return signup_form
-
 
 if __name__ == "__main__":
     ...
