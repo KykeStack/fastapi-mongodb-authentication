@@ -35,7 +35,6 @@ def create_access_token(*, subject: Union[str, Any], expires_delta: timedelta = 
     if not force_totp:
         content = {str(subject): encoded_jwt}
         __cached__.update(content)
-        print(content)
     return encoded_jwt
 
 def create_refresh_token(*, subject: Union[str, Any], expires_delta: timedelta = None) -> str:

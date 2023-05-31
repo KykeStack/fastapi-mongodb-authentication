@@ -34,7 +34,6 @@ async def get_current_user(
     """
     Get user data if not disabled
     """
-    
     if not current_user.status:
         if current_user.section == 0:
             user_message: FunctionStatus = current_user.message

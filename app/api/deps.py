@@ -12,10 +12,12 @@ from dataBase.client import session
 
 from pymongo.database import Database
 from bson.objectid import ObjectId
+from pymongo.collection import Collection
+from pymongo.database import Database
 
 reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/access-token")
 
-def get_db() -> Generator:
+def get_db() -> Union[Collection, Database]:
     try:
         collection = session['User']
         yield collection
@@ -34,8 +36,7 @@ def get_token_payload(token: str) -> TokenPayload:
     return token_data
 
 
-async def get_current_user(collection: Database = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
-    
+async def get_current_user(collection: Collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     token_data = get_token_payload(token)
     print(token_data)
     if token_data.refresh or token_data.totp:
@@ -55,7 +56,7 @@ async def get_current_user(collection: Database = Depends(get_db), token: str = 
     
 
 
-# def get_totp_user(collection: Database = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
+# def get_totp_user(collection: Collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
 #     toke n_data = get_token_payload(token)
 #     if token_data.refresh or not token_data.totp:
 #         # Refresh token is not a valid access token and TOTP False cannot be used to validate TOTP
@@ -82,7 +83,7 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     return FunctionStatus(status=True, content=token_data)
 
 
-def get_refresh_user(collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
+def get_refresh_user(collection: Collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     token_data = get_token_payload(token)
     if not token_data.refresh:
         return FunctionStatus(status=False, section=0, message="Could not validate credentials")
@@ -91,22 +92,12 @@ def get_refresh_user(collection = Depends(get_db), token: str = Depends(reusable
     except Exception as e:
         return FunctionStatus(status=False, section=1, message=f"Mongodb error: {e}")
     if form_user == None or form_user.get('deleted'):
-        return FunctionStatus(status=False, section=2, message="User not found")
+        return FunctionStatus(status=False, section=3, message="User not found")
+    if token != form_user.get('refreshToken'):
+        return FunctionStatus(status=False, section=2, message="Could not validate credentials")
     if form_user.get('disabled'):
-        return FunctionStatus(status=False, section=3, message="Inactive user")
+        return FunctionStatus(status=False, section=4, message="Inactive user")
     return FunctionStatus(status=True, content=form_user)
-
-
-
-    # Check and revoke this refresh token
-    # token_obj = crud.token.get(token=token, user=user)
-    # if not token_obj or not token_obj.is_valid:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Could not validate credentials",
-    #     )
-    # crud.token.cancel_refresh_token(db, db_obj=token_obj)
-    # return user
 
 
 # def get_current_active_user(

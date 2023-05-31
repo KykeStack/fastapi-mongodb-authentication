@@ -20,6 +20,7 @@ class CreateUser(BaseModel):
     emailValidated: bool = False
     totpSecret: bool = False
     totpCounter: Optional[str] = None
-    refreshTokens: Optional[str] = None
+    accessToken: Optional[str] = None
+    refreshToken: Optional[str] = None
     disabled: bool = False
     deleted: bool = False

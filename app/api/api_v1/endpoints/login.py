@@ -6,12 +6,15 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 
 from schemas.token import WebToken, Token
+from schemas.msg import Msg
 from api.deps import get_magic_token, get_refresh_user
 from core import security
 from core.config import settings
 
 from dataBase.client import session
 from bson.objectid import ObjectId
+from pymongo.collection import Collection
+from pymongo.database import Database
 
 from functionTypes.common import FunctionStatus
 
@@ -39,7 +42,13 @@ Specifies minimum criteria:
 
 See `security.py` for other requirements.
 """
-collection = session['User']
+
+def get_db() -> Union[Collection, Database]:
+    try:
+        collection = session['User']
+        yield collection
+    finally:
+        session
 
 mssg = HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -47,7 +56,7 @@ mssg = HTTPException(
         )
 
 @router.post("/magic/{email}" , response_model=WebToken)
-def login_with_magic_link(*,  email: EmailStr) -> Any:
+def login_with_magic_link(*, email: EmailStr, collection: Collection = Depends(get_db)) -> Any:
     """
     First step of a 'magic link' login. Check if the user exists and generate a magic link. Generates two short-duration
     jwt tokens, one for validation, one for email.
@@ -79,6 +88,7 @@ def login_with_magic_link(*,  email: EmailStr) -> Any:
 def validate_magic_link(
     *,
     obj_in: WebToken,
+    collection: Collection = Depends(get_db),
     magic_in: FunctionStatus = Depends(get_magic_token),
 ) -> Any:
     """
@@ -130,7 +140,7 @@ def validate_magic_link(
         force_totp = False
         refresh_token = security.create_refresh_token(subject=id)
         try:
-            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshTokens": refresh_token}})
+            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token}})
         except Exception as error:
             error_handler = FunctionStatus(status=False, section=0, message=error)
             print(error_handler)
@@ -142,10 +152,9 @@ def validate_magic_link(
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
-    
 
-@router.post("/refresh-token", response_model=Token)
-def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
+@router.post("/oauth", response_model=Token)
+def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collection: Collection = Depends(get_db)) -> Any:
     """
     First step with OAuth2 compatible token login, get an access token for future requests.
     """
@@ -163,7 +172,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
         force_totp = False
         refresh_token = security.create_refresh_token(subject=id)
         try:
-            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshTokens": refresh_token}})
+            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token}})
         except Exception as error:
             error_handler = FunctionStatus(status=False, section=0, message=error)
             print(error_handler)
@@ -249,7 +258,8 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
 
 @router.post("/refresh", response_model=Token)
 def refresh_token(
-    current_user: Annotated[FunctionStatus, Depends(get_refresh_user)]
+    current_user: Annotated[FunctionStatus, Depends(get_refresh_user)],
+    collection: Collection = Depends(get_db)
 ) -> Any:
     """
     Refresh tokens for future requests
@@ -264,7 +274,7 @@ def refresh_token(
     id = current_user.content.get('_id')
     refresh_token = security.create_refresh_token(subject=id)
     try:
-        data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshTokens": refresh_token}})
+        data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token}})
     except Exception as error:
         error_handler = FunctionStatus(status=False, section=0, message=error)
         print(error_handler)
@@ -278,15 +288,31 @@ def refresh_token(
     }
 
 
-# @router.post("/revoke", response_model=schemas.Msg)
-# def revoke_token(
-#     db: Session = Depends(deps.get_db),
-#     current_user: models.User = Depends(deps.get_refresh_user),
-# ) -> Any:
-#     """
-#     Revoke a refresh token
-#     """
-#     return {"msg": "Token revoked"}
+@router.post("/revoke", response_model=Msg)
+def revoke_token(
+    current_user: Annotated[FunctionStatus, Depends(get_refresh_user)],
+    collection: Collection = Depends(get_db)
+) -> Any:
+    """
+    Revoke a refresh token
+    """
+    if not current_user.status:
+        if current_user.section == 1:
+            raise mssg
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=current_user.message,
+        )
+    id = current_user.content.get('_id')
+    try:
+        data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": ""}})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    if not data.acknowledged:
+        raise mssg
+    return {"msg": "Token revoked"}
 
 
 # @router.post("/recover/{email}", response_model=Union[schemas.WebToken, schemas.Msg])
