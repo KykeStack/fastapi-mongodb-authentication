@@ -1,21 +1,11 @@
 from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Annotated, Optional
-
 from enum import Enum
 
 from localData.Countries import COUNTRIES
 from datetime import datetime
 
 import phonenumbers
-
-
-class Token(BaseModel):
-    id: str
-    accessToken: str
-    tokenType: str
-    
-class TokenData(BaseModel):
-    userId: Optional[str] = None
     
 class Gender(str, Enum):
     not_given = 'not_given'
@@ -88,6 +78,7 @@ class OptionalFullName(FullName):
     surname: Optional[str]
     secondSurname: Optional[str]
 
+
 class UserIn(BaseModel):
     id: str
     username: str
@@ -99,8 +90,6 @@ class UserIn(BaseModel):
     country: str
     phoneNumber: Optional[str] = None
     userExperience: Optional[bool] = True
-    createdAt: datetime
-    updatedAt: datetime
 
 
 class UserOut(BaseModel):
@@ -170,8 +159,7 @@ class SignUpFormIn(BaseModel):
     def parse_birthdate(cls, value):
         date = value
         valid_formats : list[str] = [
-            '%d/%m/%Y', '%d-%m-%Y', '%Y/%d/%m', '%Y-%d-%m', '%d %B, %Y'
-        ]
+            '%d/%m/%Y', '%d-%m-%Y', '%Y/%d/%m', '%Y-%d-%m', '%d %B, %Y']
         for format in valid_formats:
             try:
                 return str(datetime.strptime(date, format).date())
@@ -185,10 +173,6 @@ class SignUpFormIn(BaseModel):
         validate_username = value.lower()
         return validate_username
 
-   
-class FormOut(BaseModel):
-    acknowledged: bool
-    insertedId: str
 
 class SignUpFormOut(BaseModel):  
     id: Optional[str] = None
@@ -202,6 +186,7 @@ class SignUpFormOut(BaseModel):
     createdAt: datetime
     updatedAt: datetime
 
+
 class UpdateUserName(FullName):
     name: Optional[str] = None 
     secondName: Optional[str] = None 
@@ -211,7 +196,6 @@ class UpdateUserName(FullName):
 
 class UpdateUserData(SignUpFormIn):
     email: Optional[str] = None 
-    password: Optional[str] = None 
     fullName: Optional[UpdateUserName] = None 
     username: Optional[str] = None 
     birthdate: Optional[str] = None 
@@ -222,6 +206,5 @@ class UpdateUserData(SignUpFormIn):
     userExperience: Optional[bool]  = None 
 
 
-   
 if __name__ == "__main__":
-    pass
+    ...

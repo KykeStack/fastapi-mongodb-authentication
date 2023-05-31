@@ -6,3 +6,4 @@ class FunctionStatus(BaseModel):
     section: Optional[int] 
     message: Optional[Any] = None
     content: Optional[Any] = None
+    error: Optional[Any] = None

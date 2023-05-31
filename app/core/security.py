@@ -9,7 +9,7 @@ from passlib.exc import TokenError, MalformedTokenError
 import uuid
 
 from schemas.totp import NewTOTP
-from schemas.user import TokenData
+from schemas.token import TokenData
 
 from core.config import settings
 from dataBase.client import session
@@ -33,8 +33,9 @@ def create_access_token(*, subject: Union[str, Any], expires_delta: timedelta = 
     to_encode = {"exp": expire, "sub": str(subject), "totp": force_totp}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     if not force_totp:
-        content = {subject : encoded_jwt}
+        content = {str(subject): encoded_jwt}
         __cached__.update(content)
+        print(content)
     return encoded_jwt
 
 def create_refresh_token(*, subject: Union[str, Any], expires_delta: timedelta = None) -> str:
@@ -87,7 +88,10 @@ def verify_password(*, plain_password: str, hashed_password: str) -> FunctionSta
     try:
         is_valid_password = pwd_context.verify(plain_password, hashed_password)
     except Exception as error:
+        print(error)
         return FunctionStatus(status=False, section=0, message=f"CryptContext error: {error}")
+    if not is_valid_password:
+        return FunctionStatus(status=False, section=1, message="Invalid user password")
     return FunctionStatus(status=True, content=is_valid_password)
 
 def get_password_hash(password: str) -> FunctionStatus:
@@ -103,7 +107,7 @@ def authenticate_user(current_user: str, password: str) -> FunctionStatus:
             {'username' : current_user}, {'email': current_user}]})
     except Exception as error:
          return FunctionStatus(status=False, section=0, message=f"Mongodb error: {error}")
-    if form_user == None:
+    if form_user == None or form_user.get('deleted') == True:
         return FunctionStatus(status=False, section=1, message=f"User not found in database")
     unhash_password: FunctionStatus = verify_password(
         plain_password=password, hashed_password=form_user.get("password"))

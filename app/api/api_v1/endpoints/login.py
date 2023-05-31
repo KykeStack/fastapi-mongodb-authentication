@@ -1,4 +1,4 @@
-from typing import Any, Union, Dict
+from typing import Annotated, Any, Union, Dict
 from pydantic import EmailStr
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 
 from schemas.token import WebToken, Token
-from api.deps import get_magic_token
+from api.deps import get_magic_token, get_refresh_user
 from core import security
 from core.config import settings
 
@@ -41,13 +41,23 @@ See `security.py` for other requirements.
 """
 collection = session['User']
 
+mssg = HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service Unavailable"
+        )
+
 @router.post("/magic/{email}" , response_model=WebToken)
 def login_with_magic_link(*,  email: EmailStr) -> Any:
     """
     First step of a 'magic link' login. Check if the user exists and generate a magic link. Generates two short-duration
     jwt tokens, one for validation, one for email.
     """
-    user: dict = collection.find_one({'email': email})
+    try:
+        user: dict = collection.find_one({'email': email})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg  
     if user == None:
       raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -75,7 +85,6 @@ def validate_magic_link(
     Second step of a 'magic link' login.
     """
     claim_in = get_magic_token(token=obj_in.claim)
-    
     if not claim_in.status or not magic_in.status:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -83,41 +92,84 @@ def validate_magic_link(
         )
     user: MagicTokenPayload = magic_in.content
     magic_token: MagicTokenPayload = claim_in.content
-    
     #Get the user
-    found_user: dict = collection.find_one(ObjectId(user.sub))
-    
+    try: 
+        found_user: dict = collection.find_one(ObjectId(user.sub))
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
     id = found_user.get('_id')
     # Test the claims
-    mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
+    test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
     if (
         (user.sub == magic_token.sub)
         or (user.fingerprint != magic_token.fingerprint)
         or not found_user
         or found_user.get('disabled')
     ):
-        raise mssg
+        raise test_mssg
     # Validate that the email is the user's
     if not found_user.get('emailValidated'):
-        found_user_email: dict = collection.find_one({"email": found_user.get('email')})
+        try:
+            found_user_email: dict = collection.find_one({"email": found_user.get('email')})
+        except Exception as error:
+            error_handler = FunctionStatus(status=False, section=0, message=error)
+            print(error_handler)
+            raise mssg
         if found_user_email == None:
-            raise mssg
+            raise test_mssg
         if not str(id) == str(found_user_email.get('_id')):
-            raise mssg
+            raise test_mssg
         
     # Check if totp active
     refresh_token = None
     force_totp = True
-    if found_user.get('totpSecret') == None:
+    if not found_user.get('totpSecret'):
         # No TOTP, so this concludes the login validation
         force_totp = False
         refresh_token = security.create_refresh_token(subject=id)
-        data = collection.update_one(
-            {"_id": ObjectId(id)}, {"$push": {"refreshTokens": refresh_token}}
-        )
+        try:
+            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshTokens": refresh_token}})
+        except Exception as error:
+            error_handler = FunctionStatus(status=False, section=0, message=error)
+            print(error_handler)
+            raise mssg
         if not data.acknowledged:
             raise mssg
-        
+    return {
+        "access_token": security.create_access_token(subject=id, force_totp=force_totp),
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+    
+
+@router.post("/refresh-token", response_model=Token)
+def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
+    """
+    First step with OAuth2 compatible token login, get an access token for future requests.
+    """
+    valid_username = form_data.username.lower()
+    user: FunctionStatus = security.authenticate_user(valid_username, form_data.password)
+    if not form_data.password or not user.status:
+        raise HTTPException(status_code=400, detail="Login failed; incorrect email or password")
+    found_user: dict = user.content
+    # Check if totp active
+    refresh_token = None
+    force_totp = True
+    if not found_user.get('totpSecret'):
+        id = found_user.get('_id')
+        # No TOTP, so this concludes the login validation
+        force_totp = False
+        refresh_token = security.create_refresh_token(subject=id)
+        try:
+            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshTokens": refresh_token}})
+        except Exception as error:
+            error_handler = FunctionStatus(status=False, section=0, message=error)
+            print(error_handler)
+            raise mssg
+        if not data.acknowledged:
+            raise mssg
     return {
         "access_token": security.create_access_token(subject=id, force_totp=force_totp),
         "refresh_token": refresh_token,
@@ -125,30 +177,7 @@ def validate_magic_link(
     }
 
 
-# @router.post("/oauth", response_model=schemas.Token)
-# def login_with_oauth2(db: Session = Depends(deps.get_db), form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
-#     """
-#     First step with OAuth2 compatible token login, get an access token for future requests.
-#     """
-#     user = crud.user.authenticate(db, email=form_data.username, password=form_data.password)
-#     if not form_data.password or not user or not crud.user.is_active(user):
-#         raise HTTPException(status_code=400, detail="Login failed; incorrect email or password")
-#     # Check if totp active
-#     refresh_token = None
-#     force_totp = True
-#     if not user.totp_secret:
-#         # No TOTP, so this concludes the login validation
-#         force_totp = False
-#         refresh_token = security.create_refresh_token(subject=user.id)
-#         crud.token.create(db=db, obj_in=refresh_token, user_obj=user)
-#     return {
-#         "access_token": security.create_access_token(subject=user.id, force_totp=force_totp),
-#         "refresh_token": refresh_token,
-#         "token_type": "bearer",
-#     }
-
-
-# @router.post("/totp", response_model=schemas.Token)
+# @router.post("/totp", response_model=Token)
 # def login_with_totp(
 #     *,
 #     db: Session = Depends(deps.get_db),
@@ -218,21 +247,35 @@ def validate_magic_link(
 #     return {"msg": "TOTP disabled."}
 
 
-# @router.post("/refresh", response_model=schemas.Token)
-# def refresh_token(
-#     db: Session = Depends(deps.get_db),
-#     current_user: models.User = Depends(deps.get_refresh_user),
-# ) -> Any:
-#     """
-#     Refresh tokens for future requests
-#     """
-#     refresh_token = security.create_refresh_token(subject=current_user.id)
-#     crud.token.create(db=db, obj_in=refresh_token, user_obj=current_user)
-#     return {
-#         "access_token": security.create_access_token(subject=current_user.id),
-#         "refresh_token": refresh_token,
-#         "token_type": "bearer",
-#     }
+@router.post("/refresh", response_model=Token)
+def refresh_token(
+    current_user: Annotated[FunctionStatus, Depends(get_refresh_user)]
+) -> Any:
+    """
+    Refresh tokens for future requests
+    """
+    if not current_user.status:
+        if current_user.section == 1:
+            raise mssg
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=current_user.message,
+        )
+    id = current_user.content.get('_id')
+    refresh_token = security.create_refresh_token(subject=id)
+    try:
+        data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshTokens": refresh_token}})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    if not data.acknowledged:
+        raise mssg
+    return {
+        "access_token": security.create_access_token(subject=id),
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
 
 
 # @router.post("/revoke", response_model=schemas.Msg)

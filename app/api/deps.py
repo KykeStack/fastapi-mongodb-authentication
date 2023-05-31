@@ -82,23 +82,19 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     return FunctionStatus(status=True, content=token_data)
 
 
-# def get_refresh_user(collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
-#     token_data = get_token_payload(token)
-#     if not token_data.refresh:
-#         # Access token is not a valid refresh token
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Could not validate credentials",
-#         )
-#     form_user: dict = collection.find_one(ObjectId(token_data.sub))
-#     except Exception as e:
-#         return FunctionStatus({"status": False, "section": 0, "message": f"Mongodb error: {e}"})
-
-    # if form_user == None:
-    #     raise HTTPException(status_code=404, detail="User not found")
-    # if not form_user.get():
-    #     raise HTTPException(status_code=400, detail="Inactive user")
-    # return {"status": True, "content" : form_user}
+def get_refresh_user(collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
+    token_data = get_token_payload(token)
+    if not token_data.refresh:
+        return FunctionStatus(status=False, section=0, message="Could not validate credentials")
+    try:
+        form_user: dict = collection.find_one(ObjectId(token_data.sub))
+    except Exception as e:
+        return FunctionStatus(status=False, section=1, message=f"Mongodb error: {e}")
+    if form_user == None or form_user.get('deleted'):
+        return FunctionStatus(status=False, section=2, message="User not found")
+    if form_user.get('disabled'):
+        return FunctionStatus(status=False, section=3, message="Inactive user")
+    return FunctionStatus(status=True, content=form_user)
 
 
 

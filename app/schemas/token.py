@@ -17,25 +17,20 @@ class RefreshTokenBase(BaseModel):
     token: str
     is_valid: bool = True
 
-
 class RefreshTokenCreate(RefreshTokenBase):
     pass
 
-
 class RefreshTokenUpdate(RefreshTokenBase):
     is_valid: bool = Field(..., description="Deliberately disable a refresh token.")
-
 
 class RefreshToken(RefreshTokenUpdate):
     class Config:
         orm_mode = True
 
-
 class Token(BaseModel):
     access_token: str
     refresh_token: Optional[str] = None
     token_type: str
-
 
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
@@ -47,6 +42,13 @@ class MagicTokenPayload(BaseModel):
     sub: Optional[str] = None
     fingerprint: Optional[UUID] = None
 
-
 class WebToken(BaseModel):
     claim: str
+    
+class AccessToken(BaseModel):
+    id: str
+    accessToken: str
+    tokenType: str
+    
+class TokenData(BaseModel):
+    userId: Optional[str] = None

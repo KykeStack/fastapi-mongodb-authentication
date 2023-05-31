@@ -1,31 +1,27 @@
 from schemas.user import SignUpFormIn, SignUpFormOut
+from functionTypes.common import FunctionStatus
+from dataBase.models.user import CreateUser
+
 from fastapi import APIRouter, status, HTTPException
 from fastapi.encoders import jsonable_encoder
+
+from core.security import get_password_hash
 
 from localData.Countries import COUNTRIES
 from dataBase.client import session 
 
-from core.security import get_password_hash
-
-from datetime import datetime
-
 router = APIRouter()
 collection = session['User']
 
-
-"""Get list of available countries
-
-Raises:
-    HTTPException: 404_NOT_FOUND -> if data not available
-Returns:
-    _type_: 200_OK -> if success
-"""
 @router.get(
     "/countries", 
     status_code = status.HTTP_200_OK, 
     response_description = "Get list of available countries"
 )
 async def list_of_countries():
+    """
+    Get list of available countries 
+    """
     try:
         requested = {"countries": COUNTRIES}
         return jsonable_encoder(requested)
@@ -35,15 +31,7 @@ async def list_of_countries():
             message="Impossible to access the list of countries"
         )
 
-"""Create a new user
 
-Raises:
-    HTTPException: 400 -> The privacy policy is not accepted
-    HTTPException: 409 -> Email or username alredy exist
-
-Returns:
-    HTTPResponce : 201 -> User created, and user gather information 
-"""
 @router.post(
         "/",
         status_code = status.HTTP_201_CREATED, 
@@ -52,6 +40,9 @@ Returns:
         response_description = "Create a new user account"
     )
 async def create_user(form: SignUpFormIn):
+    """
+    Create new user without the need to be logged in.
+    """
     mssg = HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service Unavailable"
@@ -63,11 +54,9 @@ async def create_user(form: SignUpFormIn):
         )
     try:
         find_email = collection.find_one({"email": form.email})
-    except Exception as err:
-        print(
-            {"status": False,
-                "section": 0, 
-                "message": err})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
         raise mssg
     if find_email != None:
         raise HTTPException(
@@ -76,48 +65,31 @@ async def create_user(form: SignUpFormIn):
             )
     try: 
         find_username = collection.find_one({"username" : form.username})
-    except Exception as err:
-        print(
-            {"status": False,
-                "section": 1, 
-                "message": err})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=1, message=error)
+        print(error_handler)
         raise mssg
     if find_username != None:
         raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="username already exists"
             )
-        
-    time = datetime.now()
     encrypted_password = get_password_hash(form.password)
-    if not encrypted_password.get('status'):
-        print(
-            {"status": False,
-                "section": 2, 
-                "message": encrypted_password.get('message')})
+    form.password = encrypted_password.content
+    if not encrypted_password.status:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
         raise mssg
-    signup_form = {
-        **form.dict(),
-        "password": encrypted_password.get('content'),
-        "emailValidated": False, 
-        "totpSecret": None,
-        "totpCounter": None,
-        "refreshTokens": [],
-        "disabled": False,
-        "deleted": False,
-        "updatedAt": time,
-        "createdAt": time
-    }
+    signup_form = CreateUser(**form.dict())  
+    content = {**signup_form.dict()}      
     try:
-        responce = collection.insert_one(signup_form) 
-    except Exception as err:
-        print(
-            {"status": False,
-                "section": 3, 
-                "message": err})
+        responce = collection.insert_one(content) 
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=1, message=error)
+        print(error_handler)
         raise mssg
-    signup_form.update({'id': str(responce.inserted_id)}) 
-    return signup_form
+    content.update({'id': str(responce.inserted_id)})
+    return content
 
 if __name__ == "__main__":
     ...
