@@ -5,10 +5,10 @@ from typing import Any, Dict, Optional
 
 import emails
 from emails.template import JinjaTemplate
-from jose import jwt
+from jose import jwt, JWTError
 
-from app.core.config import settings
-
+from core.config import settings
+from functionTypes.common import FunctionStatus
 
 def send_email(
     email_to: str,
@@ -25,13 +25,17 @@ def send_email(
     smtp_options = {"host": settings.SMTP_HOST, "port": settings.SMTP_PORT}
     if settings.SMTP_TLS:
         smtp_options["tls"] = True
+    if settings.SMTP_SSL and not settings.SMTP_TLS:
+        smtp_options["ssl"] = True
     if settings.SMTP_USER:
         smtp_options["user"] = settings.SMTP_USER
     if settings.SMTP_PASSWORD:
         smtp_options["password"] = settings.SMTP_PASSWORD
     response = message.send(to=email_to, render=environment, smtp=smtp_options)
+    if response.status_code != 250:
+        logging.error(f"failed to send email to {email_to}, error: {response.status_code}")
     logging.info(f"send email result: {response}")
-
+    
 
 def send_test_email(email_to: str) -> None:
     project_name = settings.PROJECT_NAME
@@ -102,5 +106,5 @@ def verify_password_reset_token(token: str) -> Optional[str]:
     try:
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         return decoded_token["email"]
-    except jwt.JWTError:
+    except JWTError:
         return None

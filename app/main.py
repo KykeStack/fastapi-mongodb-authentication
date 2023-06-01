@@ -9,7 +9,6 @@ app = FastAPI(
     swagger_ui_parameters={"tryItOutEnabled": True}
 )
 
-
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
