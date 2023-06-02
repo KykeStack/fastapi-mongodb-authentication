@@ -9,14 +9,10 @@
         ></mj-image>
         <mj-divider border-color="#f43f5e"></mj-divider>
         <mj-text font-size="16px" font-weight="bold" color="#635246"
-          >{{ project_name }} - Password Recovery</mj-text
+          >Log in to {{ project_name }}</mj-text
         >
         <mj-text font-size="16px" color="#635246"
-          >We received a request to recover the password for user {{ username }}
-          with email {{ email }}</mj-text
-        >
-        <mj-text font-size="16px" color="#635246"
-          >Reset your password by clicking the button below:</mj-text
+          >Welcome! Login to your account by clicking the button below within the next {{ valid_minutes }} minutes:</mj-text
         >
         <mj-button
           background-color="#f43f5e"
@@ -24,25 +20,21 @@
           font-family="helvetica"
           href="{{ link }}"
         >
-          Reset Password
+          Login
         </mj-button>
         <mj-text font-size="16px" color="#635246"
-          >Or open the following link:</mj-text
+          >Or copy the following link and paste it in your browser:</mj-text
         >
         <mj-text font-size="16px" color="#635246"
           ><a href="{{ link }}">{{ link }}</a></mj-text
         >
         <mj-divider border-color="#635246" border-width="2px" />
         <mj-text font-size="16px" color="#635246"
-          >The reset password link / button will expire in {{ valid_hours }}
-          hours.</mj-text
+                 >Make sure you use this code on the <span style="font-weight: bold">same device</span> and in the <span style="font-weight: bold">same browser</span> where you made this request or it won't work.</mj-text
         >
-        <mj-text font-size="16px" color="#635246"
-          >If you didn't request a password recovery you can disregard this
-          email.</mj-text
-        >
+
         <mj-text font-size="16px" color="#635246" font-family="helvetica"
-          >For any concerns or queries, just email me.</mj-text
+          >For any concerns or queries, especially if you didn't make this request or feel you received it by mistake, just email me.</mj-text
         >
         <mj-text
           font-size="16px"

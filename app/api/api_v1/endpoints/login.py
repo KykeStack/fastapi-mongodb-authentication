@@ -4,26 +4,25 @@ from pydantic import EmailStr
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
-
 from schemas.token import WebToken, Token
 from schemas.msg import Msg
 from api.deps import get_magic_token, get_refresh_user
 from core import security
-from core.config import settings
 
+from core.config import settings
 from dataBase.client import session
+
 from bson.objectid import ObjectId
 from pymongo.collection import Collection
 from pymongo.database import Database
 
 from functionTypes.common import FunctionStatus
-
 from schemas.token import MagicTokenPayload
 
-# from app.utilities import (
-#     send_reset_password_email,
-#     send_magic_login_email,
-# )
+from utils.emailsMessage import (
+    send_reset_password_email,
+    send_magic_login_email,
+)
 
 router = APIRouter()
 
@@ -43,9 +42,16 @@ Specifies minimum criteria:
 See `security.py` for other requirements.
 """
 
-def get_db() -> Union[Collection, Database]:
+def get_user_db() -> Union[Collection, Database]:
     try:
         collection = session['User']
+        yield collection
+    finally:
+        session
+        
+def get_magic_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Magic']
         yield collection
     finally:
         session
@@ -56,13 +62,17 @@ mssg = HTTPException(
         )
 
 @router.post("/magic/{email}" , response_model=WebToken)
-def login_with_magic_link(*, email: EmailStr, collection: Collection = Depends(get_db)) -> Any:
+def login_with_magic_link(
+    *, 
+    email: EmailStr, 
+    user_collection: Collection = Depends(get_user_db), 
+    magic_collection: Collection = Depends(get_magic_db)) -> Any:
     """
     First step of a 'magic link' login. Check if the user exists and generate a magic link. Generates two short-duration
     jwt tokens, one for validation, one for email.
     """
     try:
-        user: dict = collection.find_one({'email': email})
+        user: dict = user_collection.find_one({'email': email})
     except Exception as error:
         error_handler = FunctionStatus(status=False, section=0, message=error)
         print(error_handler)
@@ -77,10 +87,10 @@ def login_with_magic_link(*, email: EmailStr, collection: Collection = Depends(g
         raise HTTPException(status_code=400, detail="A link to activate your account has been emailed.")
     tokens = security.create_magic_tokens(subject=user.get('_id')) 
     
-    # if settings.EMAILS_ENABLED and user.email:
-    #     # Send email with user.email as subject
-    #     send_magic_login_email(email_to=user.email, token=tokens[0])
-    print(tokens[0])
+    user_email = user.get('email')
+    if settings.EMAILS_ENABLED and user_email:
+        # Send email with user.email as subject
+        send_magic_login_email(email_to=user_email, token=tokens[0])
     return {"claim": tokens[1]}
 
 
@@ -88,7 +98,7 @@ def login_with_magic_link(*, email: EmailStr, collection: Collection = Depends(g
 def validate_magic_link(
     *,
     obj_in: WebToken,
-    collection: Collection = Depends(get_db),
+    collection: Collection = Depends(get_user_db),
     magic_in: FunctionStatus = Depends(get_magic_token),
 ) -> Any:
     """
@@ -154,7 +164,7 @@ def validate_magic_link(
     }
 
 @router.post("/oauth", response_model=Token)
-def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collection: Collection = Depends(get_db)) -> Any:
+def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collection: Collection = Depends(get_user_db)) -> Any:
     """
     First step with OAuth2 compatible token login, get an access token for future requests.
     """
@@ -189,7 +199,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
 # @router.post("/totp", response_model=Token)
 # def login_with_totp(
 #     *,
-#     db: Session = Depends(deps.get_db),
+#     db: Session = Depends(deps.get_user_db),
 #     totp_data: schemas.WebToken,
 #     current_user: models.User = Depends(deps.get_totp_user),
 # ) -> Any:
@@ -215,7 +225,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
 # @router.put("/totp", response_model=schemas.Msg)
 # def enable_totp_authentication(
 #     *,
-#     db: Session = Depends(deps.get_db),
+#     db: Session = Depends(deps.get_user_db),
 #     data_in: schemas.EnableTOTP,
 #     current_user: models.User = Depends(deps.get_current_active_user),
 # ) -> Any:
@@ -241,7 +251,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
 # @router.delete("/totp", response_model=schemas.Msg)
 # def disable_totp_authentication(
 #     *,
-#     db: Session = Depends(deps.get_db),
+#     db: Session = Depends(deps.get_user_db),
 #     data_in: schemas.UserUpdate,
 #     current_user: models.User = Depends(deps.get_current_active_user),
 # ) -> Any:
@@ -259,7 +269,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
 @router.post("/refresh", response_model=Token)
 def refresh_token(
     current_user: Annotated[FunctionStatus, Depends(get_refresh_user)],
-    collection: Collection = Depends(get_db)
+    collection: Collection = Depends(get_user_db)
 ) -> Any:
     """
     Refresh tokens for future requests
@@ -291,7 +301,7 @@ def refresh_token(
 @router.post("/revoke", response_model=Msg)
 def revoke_token(
     current_user: Annotated[FunctionStatus, Depends(get_refresh_user)],
-    collection: Collection = Depends(get_db)
+    collection: Collection = Depends(get_user_db)
 ) -> Any:
     """
     Revoke a refresh token
@@ -315,45 +325,90 @@ def revoke_token(
     return {"msg": "Token revoked"}
 
 
-# @router.post("/recover/{email}", response_model=Union[schemas.WebToken, schemas.Msg])
-# def recover_password(email: str, db: Session = Depends(deps.get_db)) -> Any:
-#     """
-#     Password Recovery
-#     """
-#     user = crud.user.get_by_email(db, email=email)
-#     if user and crud.user.is_active(user):
-#         tokens = security.create_magic_tokens(subject=user.id)
-#         if settings.EMAILS_ENABLED:
-#             send_reset_password_email(email_to=user.email, email=email, token=tokens[0])
-#             return {"claim": tokens[1]}
-#     return {"msg": "If that login exists, we'll send you an email to reset your password."}
+@router.post("/recover/{email}", response_model=Union[WebToken, Msg])
+def recover_password(
+    email: str, 
+    collection: Collection = Depends(get_user_db)
+    ) -> Any:
+    """
+    Password Recovery
+    """
+    try:
+        user: dict = collection.find_one({"email": email})
+        
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    if user != None and not user.get('disabled'):
+        tokens = security.create_magic_tokens(subject=user.get('_id'))
+        if settings.EMAILS_ENABLED:
+            send_reset_password_email(email_to=user.get('email'), email=email, token=tokens[0])
+            return {"claim": tokens[1]}
+    return {"msg": "If that login exists, we'll send you an email to reset your password."}
 
 
-# @router.post("/reset", response_model=schemas.Msg)
-# def reset_password(
-#     *,
-#     db: Session = Depends(deps.get_db),
-#     new_password: str = Body(...),
-#     claim: str = Body(...),
-#     magic_in: bool = Depends(deps.get_magic_token),
-# ) -> Any:
-#     """
-#     Reset password
-#     """
-#     claim_in = deps.get_magic_token(token=claim)
-#     # Get the user
-#     user = crud.user.get(db, id=magic_in.sub)
-#     # Test the claims
-#     if (
-#         (claim_in.sub == magic_in.sub)
-#         or (claim_in.fingerprint != magic_in.fingerprint)
-#         or not user
-#         or not crud.user.is_active(user)
-#     ):
-#         raise HTTPException(status_code=400, detail="Password update failed; invalid claim.")
-#     # Update the password
-#     hashed_password = security.get_password_hash(new_password)
-#     user.hashed_password = hashed_password
-#     db.add(user)
-#     db.commit()
-#     return {"msg": "Password updated successfully."}
+@router.post("/reset", response_model=Msg)
+def reset_password(
+    *,
+    collection: Collection = Depends(get_user_db),
+    new_password: str = Body(...),
+    claim: str = Body(...),
+    magic_in: FunctionStatus = Depends(get_magic_token),
+) -> Any:
+    """
+    Reset password
+    """
+    claim_in = get_magic_token(token=claim)
+    if not claim_in.status or not magic_in.status:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+    user: MagicTokenPayload = magic_in.content
+    magic_token: MagicTokenPayload = claim_in.content
+    # Get the user
+    try: 
+        found_user: dict = collection.find_one(ObjectId(user.sub))
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    
+    # Test the claims
+    test_mssg = HTTPException(status_code=400, detail="Password update failed; invalid claim.")
+    if (
+        (user.sub == magic_token.sub)
+        or (user.fingerprint != magic_token.fingerprint)
+        or not found_user
+        or found_user.get('disabled')
+    ):
+        raise test_mssg
+    password_defer = security.verify_password(plain_password=new_password, hashed_password=found_user.get('password'))
+    if not password_defer.status and password_defer.section == 0:
+        print(password_defer)
+        raise test_mssg
+    
+    if password_defer.content == True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Password update failed; new password is the same as the old one."
+        )
+    # Update the password
+    hashed_password = security.get_password_hash(new_password)
+    if not hashed_password.status:
+        print(hashed_password)
+        raise test_mssg
+    id = found_user.get('_id')
+    try:
+        responce = collection.update_one(
+            {"_id": id},
+                {"$set": {'password' : hashed_password.content}}
+                )
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    if responce.raw_result.get('nModified') != 1:
+        raise mssg 
+    return {"msg": "Password updated successfully."}

@@ -7,8 +7,9 @@ import emails
 from emails.template import JinjaTemplate
 from jose import jwt, JWTError
 
+from schemas.emails import EmailContent, EmailValidation
+
 from core.config import settings
-from functionTypes.common import FunctionStatus
 
 def send_email(
     email_to: str,
@@ -31,11 +32,42 @@ def send_email(
         smtp_options["user"] = settings.SMTP_USER
     if settings.SMTP_PASSWORD:
         smtp_options["password"] = settings.SMTP_PASSWORD
+        
+    # Add common template environment elements
+    environment["server_host"] = settings.SERVER_HOST
+    environment["server_name"] = settings.SERVER_NAME
+    environment["server_bot"] = settings.SERVER_BOT
+    
     response = message.send(to=email_to, render=environment, smtp=smtp_options)
     if response.status_code != 250:
         logging.error(f"failed to send email to {email_to}, error: {response.status_code}")
     logging.info(f"send email result: {response}")
     
+def send_email_validation_email(data: EmailValidation) -> None:
+    subject = f"{settings.PROJECT_NAME} - {data.subject}"
+    server_host = settings.SERVER_HOST
+    link = f"{server_host}?token={data.token}"
+    with open(Path(settings.EMAIL_TEMPLATES_DIR) / "confirm_email.html") as f:
+        template_str = f.read()
+    send_email(
+        email_to=data.email,
+        subject_template=subject,
+        html_template=template_str,
+        environment={"link": link},
+    )
+
+
+def send_web_contact_email(data: EmailContent) -> None:
+    subject = f"{settings.PROJECT_NAME} - {data.subject}"
+    with open(Path(settings.EMAIL_TEMPLATES_DIR) / "web_contact_email.html") as f:
+        template_str = f.read()
+    send_email(
+        email_to=settings.EMAILS_TO_EMAIL,
+        subject_template=subject,
+        html_template=template_str,
+        environment={"content": data.content, "email": data.email},
+    )
+
 
 def send_test_email(email_to: str) -> None:
     project_name = settings.PROJECT_NAME
@@ -47,6 +79,25 @@ def send_test_email(email_to: str) -> None:
         subject_template=subject,
         html_template=template_str,
         environment={"project_name": settings.PROJECT_NAME, "email": email_to},
+    )
+
+
+def send_magic_login_email(email_to: str, token: str) -> None:
+    project_name = settings.PROJECT_NAME
+    subject = f"Your {project_name} magic login"
+    with open(Path(settings.EMAIL_TEMPLATES_DIR) / "magic_login.html") as f:
+        template_str = f.read()
+    server_host = settings.SERVER_HOST
+    link = f"{server_host}?magic={token}"
+    send_email(
+        email_to=email_to,
+        subject_template=subject,
+        html_template=template_str,
+        environment={
+            "project_name": settings.PROJECT_NAME,
+            "valid_minutes": int(settings.ACCESS_TOKEN_EXPIRE_MINUTES / 60),
+            "link": link,
+        },
     )
 
 
@@ -65,7 +116,7 @@ def send_reset_password_email(email_to: str, email: str, token: str) -> None:
             "project_name": settings.PROJECT_NAME,
             "username": email,
             "email": email_to,
-            "valid_hours": settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
+            "valid_hours": int(settings.ACCESS_TOKEN_EXPIRE_MINUTES/ 60),
             "link": link,
         },
     )
@@ -89,22 +140,3 @@ def send_new_account_email(email_to: str, username: str, password: str) -> None:
             "link": link,
         },
     )
-
-
-def generate_password_reset_token(email: str) -> str:
-    delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
-    now = datetime.utcnow()
-    expires = now + delta
-    exp = expires.timestamp()
-    encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email}, settings.SECRET_KEY, algorithm="HS256",
-    )
-    return encoded_jwt
-
-
-def verify_password_reset_token(token: str) -> Optional[str]:
-    try:
-        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        return decoded_token["email"]
-    except JWTError:
-        return None

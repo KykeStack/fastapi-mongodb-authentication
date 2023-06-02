@@ -14,24 +14,30 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int 
     JWT_ALGORITHM: str 
     TOTP_ALGORITHM: str
-    SERVER_NAME: str 
     DATABASE_NAME: str
     MONGODB_URL: str 
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
     
     # For email management is necessary, an SMTP host 
     EMAILS_ENABLED: bool = False
-    EMAILS_FROM_NAME: Optional[str]
-    EMAILS_FROM_EMAIL: Optional[str]
-    SMTP_HOST: Optional[str]
-    SMTP_PORT: Optional[int]
-    SMTP_TLS: Optional[bool]
-    SMTP_SSL: Optional[bool]
-    SMTP_USER: Optional[str]
-    SMTP_PASSWORD: Optional[str]
-    EMAIL_TEMPLATES_DIR: Optional[str]
-    EMAIL_RESET_TOKEN_EXPIRE_HOURS: Optional[int]
-    SERVER_HOST= Optional[str]
+    
+    #Contact/Support Email
+    EMAILS_TO_EMAIL: Optional[str] = None
+    EMAILS_FROM_NAME: Optional[str] = None
+    EMAILS_FROM_EMAIL: Optional[str] = None
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: Optional[int] = None
+    SMTP_TLS: bool = False
+    SMTP_SSL: bool = True
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    EMAIL_TEMPLATES_DIR: Optional[str] = None
+    EMAIL_RESET_TOKEN_EXPIRE_HOURS: Optional[int] = 1
+    
+    # Add common template environment elements
+    SERVER_HOST: Optional[str] = None #this is the enpoint 
+    SERVER_BOT: Optional[str] = None #Contact bot 
+    SERVER_NAME: Optional[str] = None # email domain
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
@@ -42,6 +48,6 @@ class Settings(BaseSettings):
         raise ValueError(v)
     
     class Config:
-        env_file = ".env.local"
+        env_file = "../.env.local"
 
 settings = Settings()
