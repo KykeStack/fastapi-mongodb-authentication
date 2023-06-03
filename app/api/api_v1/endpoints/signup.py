@@ -4,6 +4,7 @@ from dataBase.models.user import CreateUser
 
 from fastapi import APIRouter, status, HTTPException
 from fastapi.encoders import jsonable_encoder
+from pydantic import parse_obj_as
 
 from core.security import get_password_hash
 
@@ -83,10 +84,12 @@ async def create_user(form: SignUpFormIn):
     signup_form = CreateUser(**form.dict())  
     content = {**signup_form.dict()}      
     try:
-        responce = collection.insert_one(content) 
+        responce = collection.insert_one(content)
     except Exception as error:
         error_handler = FunctionStatus(status=False, section=1, message=error)
         print(error_handler)
+        raise mssg
+    if not responce.acknowledged:
         raise mssg
     content.update({'id': str(responce.inserted_id)})
     return content

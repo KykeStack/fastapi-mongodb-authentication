@@ -2,14 +2,13 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app import schemas
-from utilities.a import send_web_contact_email
-from app.schemas import EmailContent
+from schemas.msg import Msg
+from schemas.emails import EmailContent
+from utils.emailsMessage import send_web_contact_email
 
 router = APIRouter()
 
-
-@router.post("/contact", response_model=schemas.Msg, status_code=201)
+@router.post("/contact", response_model=Msg, status_code=201)
 def send_email(*, data: EmailContent) -> Any:
     """
     Standard app contact us.

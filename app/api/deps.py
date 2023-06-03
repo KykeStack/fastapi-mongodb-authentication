@@ -4,9 +4,10 @@ from functionTypes.common import FunctionStatus
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from pydantic import ValidationError
+from pydantic import ValidationError, parse_obj_as
 
 from schemas.token import TokenPayload, MagicTokenPayload
+from dataBase.models.user import User
 from core.config import settings
 from dataBase.client import session
 
@@ -36,9 +37,11 @@ def get_token_payload(token: str) -> TokenPayload:
     return token_data
 
 
-async def get_current_user(collection: Collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
+async def get_current_user(
+    collection: Collection = Depends(get_db), 
+    token: str = Depends(reusable_oauth2)
+    ) -> FunctionStatus:
     token_data = get_token_payload(token)
-    print(token_data)
     if token_data.refresh or token_data.totp:
         # Refresh token is not a valid access token and TOTP True can only be used to validate TOTP
         raise HTTPException(
@@ -83,7 +86,10 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     return FunctionStatus(status=True, content=token_data)
 
 
-def get_refresh_user(collection: Collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionStatus:
+def get_refresh_user(
+    collection: Collection = Depends(get_db), 
+    token: str = Depends(reusable_oauth2)
+    ) -> FunctionStatus:
     token_data = get_token_payload(token)
     if not token_data.refresh:
         return FunctionStatus(status=False, section=0, message="Could not validate credentials")
@@ -100,12 +106,18 @@ def get_refresh_user(collection: Collection = Depends(get_db), token: str = Depe
     return FunctionStatus(status=True, content=form_user)
 
 
-# def get_current_active_user(
-#     current_user: models.User = Depends(get_current_user),
-# ) -> models.User:
-#     if not crud.user.is_active(current_user):
-#         raise HTTPException(status_code=400, detail="Inactive user")
-#     return current_user
+def get_current_active_user(
+    current_user: FunctionStatus = Depends(get_current_user),
+) -> FunctionStatus:
+    if not current_user.status:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Could not validate credentials'
+        )
+    user = parse_obj_as(User, current_user.content)
+    if not user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return FunctionStatus(status=True, content=user)
 
 
 # def get_current_active_superuser(

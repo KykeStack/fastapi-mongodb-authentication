@@ -1,5 +1,5 @@
 from typing import Annotated, Any, Union, Dict
-from pydantic import EmailStr
+from pydantic import EmailStr, parse_obj_as
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.security import OAuth2PasswordRequestForm
@@ -18,6 +18,7 @@ from pymongo.database import Database
 
 from functionTypes.common import FunctionStatus
 from schemas.token import MagicTokenPayload
+from dataBase.models.magix import MagicData, UpdateMagicData
 
 from utils.emailsMessage import (
     send_reset_password_email,
@@ -49,6 +50,8 @@ def get_user_db() -> Union[Collection, Database]:
     finally:
         session
         
+        
+# ----- Section To be deleted just for testing purposes -----     
 def get_magic_db() -> Union[Collection, Database]:
     try:
         collection = session['Magic']
@@ -56,17 +59,27 @@ def get_magic_db() -> Union[Collection, Database]:
     finally:
         session
 
+def get_pasword_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Password']
+        yield collection
+    finally:
+        session
+# ----- End Section -----
+
+
 mssg = HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Service Unavailable"
         )
 
-@router.post("/magic/{email}" , response_model=WebToken)
+@router.post("/magic/{email}" , response_model=Union[WebToken, Msg])
 def login_with_magic_link(
     *, 
     email: EmailStr, 
     user_collection: Collection = Depends(get_user_db), 
-    magic_collection: Collection = Depends(get_magic_db)) -> Any:
+    magic_collection: Collection = Depends(get_magic_db)
+    ) -> Any:
     """
     First step of a 'magic link' login. Check if the user exists and generate a magic link. Generates two short-duration
     jwt tokens, one for validation, one for email.
@@ -74,20 +87,44 @@ def login_with_magic_link(
     try:
         user: dict = user_collection.find_one({'email': email})
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
+        error_handler = FunctionStatus(
+            functionName='login_with_magic_link', status=False, section=0, message=error)
         print(error_handler)
         raise mssg  
     if user == None:
-      raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )  
+      return {"msg": "If that login exists, we'll send you a magic link to your email."}
     if user.get('disabled'):
         # Still permits a timed-attack, but does create ambiguity.
         raise HTTPException(status_code=400, detail="A link to activate your account has been emailed.")
     tokens = security.create_magic_tokens(subject=user.get('_id')) 
-    
     user_email = user.get('email')
+    
+    # ----- Section To be deleted just for testing purposes -----    
+    try:
+        update_content = UpdateMagicData(claimToken=tokens[1])
+        responce = magic_collection.update_one(
+            {"foreignId": user.get("_id")}, {"$set": {**update_content.dict()}})
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName='login_with_magic_link', status=False, section=1, message=error)
+        print(error_handler)
+        raise mssg
+    if not responce.acknowledged:
+        raise mssg
+    if responce.modified_count == 0:
+        content = MagicData(foreignId=user.get('_id'), email=user_email, claimToken=tokens[1])
+        try:
+            responce = magic_collection.insert_one({**content.dict()})
+        except Exception as error:
+            error_handler = FunctionStatus(
+                functionName='login_with_magic_link', status=False, section=2, message=error)
+            print(error_handler)
+            raise mssg
+        if not responce.acknowledged:
+            raise mssg
+        print(responce)
+    # ----- End Section -----
+    
     if settings.EMAILS_ENABLED and user_email:
         # Send email with user.email as subject
         send_magic_login_email(email_to=user_email, token=tokens[0])
@@ -99,7 +136,7 @@ def validate_magic_link(
     *,
     obj_in: WebToken,
     collection: Collection = Depends(get_user_db),
-    magic_in: FunctionStatus = Depends(get_magic_token),
+    magic_in: FunctionStatus = Depends(get_magic_token)
 ) -> Any:
     """
     Second step of a 'magic link' login.
@@ -328,26 +365,59 @@ def revoke_token(
 @router.post("/recover/{email}", response_model=Union[WebToken, Msg])
 def recover_password(
     email: str, 
-    collection: Collection = Depends(get_user_db)
+    user_collection: Collection = Depends(get_user_db),
+    pasword_collection: Collection = Depends(get_pasword_db)
     ) -> Any:
     """
     Password Recovery
     """
     try:
-        user: dict = collection.find_one({"email": email})
-        
+        user: dict = user_collection.find_one({"email": email})
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
+        error_handler = FunctionStatus(
+            functionName='recover_password', status=False, section=0, message=error)
         print(error_handler)
         raise mssg
-    if user != None and not user.get('disabled'):
-        tokens = security.create_magic_tokens(subject=user.get('_id'))
-        if settings.EMAILS_ENABLED:
-            send_reset_password_email(email_to=user.get('email'), email=email, token=tokens[0])
-            return {"claim": tokens[1]}
-    return {"msg": "If that login exists, we'll send you an email to reset your password."}
-
-
+    if user == None:
+        return {"msg": "If that login exists, we'll send you an email to reset your password."}
+    if user.get('disabled'):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Recover failed; invalid claim."
+        )  
+    tokens = security.create_magic_tokens(subject=user.get('_id'))     
+    
+     # ----- Section To be deleted just for testing purposes -----    
+    try:
+        update_content = UpdateMagicData(claimToken=tokens[1])
+        responce = pasword_collection.update_one(
+            {"foreignId": user.get("_id")}, {"$set": {**update_content.dict()}})
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName='recover_password', status=False, section=1, message=error)
+        print(error_handler)
+        raise mssg
+    if not responce.acknowledged:
+        raise mssg
+    if responce.modified_count != 0:
+        return {"claim": tokens[1]}
+    content = MagicData(foreignId=user.get('_id'), email=user.get('email'), claimToken=tokens[1])
+    try:
+        responce = pasword_collection.insert_one({**content.dict()})
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName='login_with_magic_link', status=False, section=2, message=error)
+        print(error_handler)
+        raise mssg
+    if not responce.acknowledged:
+        raise mssg
+    # ----- End Section -----
+    
+    if settings.EMAILS_ENABLED:
+        send_reset_password_email(email_to=user.get('username'), email=email, token=tokens[0])
+    return {"claim": tokens[1]}
+    
+    
 @router.post("/reset", response_model=Msg)
 def reset_password(
     *,
@@ -383,8 +453,9 @@ def reset_password(
         or not found_user
         or found_user.get('disabled')
     ):
-        raise test_mssg
-    password_defer = security.verify_password(plain_password=new_password, hashed_password=found_user.get('password'))
+        raise HTTPException(status_code=400, detail="Password update failed; invalid claim.")
+    password_defer = security.verify_password(
+        plain_password=new_password, hashed_password=found_user.get('password'))
     if not password_defer.status and password_defer.section == 0:
         print(password_defer)
         raise test_mssg
@@ -409,6 +480,6 @@ def reset_password(
         error_handler = FunctionStatus(status=False, section=0, message=error)
         print(error_handler)
         raise mssg
-    if responce.raw_result.get('nModified') != 1:
+    if not responce.acknowledged:
         raise mssg 
     return {"msg": "Password updated successfully."}
