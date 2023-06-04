@@ -1,11 +1,9 @@
 import logging
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import emails
 from emails.template import JinjaTemplate
-from jose import jwt, JWTError
 
 from schemas.emails import EmailContent, EmailValidation
 
@@ -102,9 +100,9 @@ def send_magic_login_email(email_to: str, token: str) -> None:
     )
 
 
-def send_reset_password_email(email_to: str, email: str, token: str) -> None:
+def send_reset_password_email(email_to: str, username: str, token: str) -> None:
     project_name = settings.PROJECT_NAME
-    subject = f"{project_name} - Password recovery for user {email}"
+    subject = f"{project_name} - Password recovery for user {username}"
     with open(Path(settings.EMAIL_TEMPLATES_DIR) / "reset_password.html") as f:
         template_str = f.read()
     server_host = settings.SERVER_HOST
@@ -116,7 +114,7 @@ def send_reset_password_email(email_to: str, email: str, token: str) -> None:
         html_template=template_str,
         environment={
             "project_name": settings.PROJECT_NAME,
-            "username": email,
+            "username": username,
             "email": email_to,
             "valid_hours": int(settings.ACCESS_TOKEN_EXPIRE_MINUTES/ 60),
             "link": link,

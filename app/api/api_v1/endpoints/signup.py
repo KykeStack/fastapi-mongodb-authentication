@@ -4,9 +4,8 @@ from dataBase.models.user import CreateUser
 
 from fastapi import APIRouter, status, HTTPException
 from fastapi.encoders import jsonable_encoder
-from pydantic import parse_obj_as
 
-from core.security import get_password_hash
+from api.deps import get_password_hash
 
 from localData.Countries import COUNTRIES
 from dataBase.client import session 

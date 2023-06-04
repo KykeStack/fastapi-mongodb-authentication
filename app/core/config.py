@@ -1,9 +1,5 @@
-import secrets
 from typing import Any, Dict, List, Optional, Union
-from pydantic import AnyHttpUrl, BaseSettings, EmailStr, HttpUrl, PostgresDsn, validator
-# from dotenv import dotenv_values
-
-# secrets=dotenv_values(".env.local")
+from pydantic import AnyHttpUrl, BaseSettings, EmailStr, HttpUrl, validator
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
@@ -22,20 +18,20 @@ class Settings(BaseSettings):
     EMAILS_ENABLED: bool = False
     
     #Contact/Support Email
-    EMAILS_TO_EMAIL: Optional[str] = None
+    EMAILS_TO_EMAIL: Optional[EmailStr] = None
     EMAILS_FROM_NAME: Optional[str] = None
-    EMAILS_FROM_EMAIL: Optional[str] = None
+    EMAILS_FROM_EMAIL: Optional[EmailStr] = None
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: Optional[int] = None
     SMTP_TLS: bool = False
     SMTP_SSL: bool = True
-    SMTP_USER: Optional[str] = None
+    SMTP_USER: Optional[EmailStr] = None
     SMTP_PASSWORD: Optional[str] = None
     EMAIL_TEMPLATES_DIR: Optional[str] = None
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: Optional[int] = 1
     
     # Add common template environment elements
-    SERVER_HOST: Optional[str] = None #this is the enpoint 
+    SERVER_HOST: Optional[HttpUrl] = None #this is the enpoint 
     SERVER_BOT: Optional[str] = None #Contact bot 
     SERVER_NAME: Optional[str] = None # email domain
 

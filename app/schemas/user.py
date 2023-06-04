@@ -195,7 +195,7 @@ class UpdateUserName(FullName):
     secondSurname:Optional[str] = None 
 
 
-class UpdateUserData(SignUpFormIn):
+class UpdateUserData(BaseModel):
     email: Optional[str] = None 
     fullName: Optional[UpdateUserName] = None 
     username: Optional[str] = None 
@@ -203,9 +203,49 @@ class UpdateUserData(SignUpFormIn):
     gender: Optional[Gender] = None 
     country: Optional[str] = None 
     phoneNumber: Optional[str] = None 
-    privacyPolicy: Optional[bool] = None
     userExperience: Optional[bool]  = None 
-
-
+    
+    @validator("country")
+    def parse_country(cls, value):
+         try:
+            if value in COUNTRIES:
+                index : int = COUNTRIES.index(value)
+                return COUNTRIES[index]
+            else:
+                raise ValueError(f"Country name: {value}, not Found")
+         except Exception as e:
+             raise e
+         
+    @validator("phoneNumber")
+    def parse_phone_number(cls, value):
+        if value is not None:
+            try:
+                parsed = phonenumbers.parse(value)
+                if phonenumbers.is_valid_number(parsed):
+                    joined_phonenumber = value.replace(" ", "")
+                    return joined_phonenumber
+                else:
+                    raise ValueError(f"Invalid phone number: {value}")
+            except Exception as e:
+                raise ValueError(e)
+    
+    @validator("birthdate")
+    def parse_birthdate(cls, value):
+        date = value
+        valid_formats : list[str] = [
+            '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d', '%Y-%m-%d', '%d %B, %Y']
+        for format in valid_formats:
+            try:
+                return str(datetime.strptime(date, format).date())
+            except Exception:
+                pass
+        raise ValueError(f"Invalid birthdate: {value}. List of valid formats:{valid_formats}")
+    
+    @validator('username')
+    def username_alphanumeric(cls, value):
+        assert value.isalnum(), 'must be alphanumeric'
+        validate_username = value.lower()
+        return validate_username
+    
 if __name__ == "__main__":
     ...

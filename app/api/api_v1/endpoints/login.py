@@ -1,12 +1,12 @@
 from typing import Annotated, Any, Union, Dict
-from pydantic import EmailStr, parse_obj_as
+from pydantic import EmailStr
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
 from schemas.token import WebToken, Token
 from schemas.msg import Msg
-from api.deps import get_magic_token, get_refresh_user
+
 from core import security
 
 from core.config import settings
@@ -23,6 +23,14 @@ from dataBase.models.magix import MagicData, UpdateMagicData
 from utils.emailsMessage import (
     send_reset_password_email,
     send_magic_login_email,
+)
+
+from api.deps import (
+    get_magic_token, 
+    get_refresh_user, 
+    authenticate_user,
+    verify_password,
+    get_password_hash
 )
 
 router = APIRouter()
@@ -93,7 +101,7 @@ def login_with_magic_link(
         raise mssg  
     if user == None:
       return {"msg": "If that login exists, we'll send you a magic link to your email."}
-    if user.get('disabled'):
+    if user.get('disabled') or user.get('deleted'):
         # Still permits a timed-attack, but does create ambiguity.
         raise HTTPException(status_code=400, detail="A link to activate your account has been emailed.")
     tokens = security.create_magic_tokens(subject=user.get('_id')) 
@@ -186,8 +194,10 @@ def validate_magic_link(
         # No TOTP, so this concludes the login validation
         force_totp = False
         refresh_token = security.create_refresh_token(subject=id)
+        access_token = security.create_access_token(subject=id, force_totp=force_totp)
         try:
-            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token}})
+            data = collection.update_one(
+                {"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token, "accessToken": access_token}})
         except Exception as error:
             error_handler = FunctionStatus(status=False, section=0, message=error)
             print(error_handler)
@@ -195,7 +205,7 @@ def validate_magic_link(
         if not data.acknowledged:
             raise mssg
     return {
-        "access_token": security.create_access_token(subject=id, force_totp=force_totp),
+        "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
@@ -206,7 +216,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
     First step with OAuth2 compatible token login, get an access token for future requests.
     """
     valid_username = form_data.username.lower()
-    user: FunctionStatus = security.authenticate_user(valid_username, form_data.password)
+    user: FunctionStatus = authenticate_user(valid_username, form_data.password)
     if not form_data.password or not user.status:
         raise HTTPException(status_code=400, detail="Login failed; incorrect email or password")
     found_user: dict = user.content
@@ -218,8 +228,9 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
         # No TOTP, so this concludes the login validation
         force_totp = False
         refresh_token = security.create_refresh_token(subject=id)
+        access_token = security.create_access_token(subject=id, force_totp=force_totp)
         try:
-            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token}})
+            data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token,"accessToken": access_token}})
         except Exception as error:
             error_handler = FunctionStatus(status=False, section=0, message=error)
             print(error_handler)
@@ -227,7 +238,7 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
         if not data.acknowledged:
             raise mssg
     return {
-        "access_token": security.create_access_token(subject=id, force_totp=force_totp),
+        "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
@@ -320,8 +331,10 @@ def refresh_token(
         )
     id = current_user.content.get('_id')
     refresh_token = security.create_refresh_token(subject=id)
+    access_token = security.create_access_token(subject=id)
     try:
-        data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token}})
+        data = collection.update_one(
+            {"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token, "accessToken": access_token}})
     except Exception as error:
         error_handler = FunctionStatus(status=False, section=0, message=error)
         print(error_handler)
@@ -329,7 +342,7 @@ def refresh_token(
     if not data.acknowledged:
         raise mssg
     return {
-        "access_token": security.create_access_token(subject=id),
+        "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
@@ -399,9 +412,11 @@ def recover_password(
         raise mssg
     if not responce.acknowledged:
         raise mssg
+    if settings.EMAILS_ENABLED:
+        send_reset_password_email(email_to=email, username=user.get('username'), token=tokens[0])
     if responce.modified_count != 0:
         return {"claim": tokens[1]}
-    content = MagicData(foreignId=user.get('_id'), email=user.get('email'), claimToken=tokens[1])
+    content = MagicData(foreignId=user.get('_id'), email=user.get('username'), claimToken=tokens[1])
     try:
         responce = pasword_collection.insert_one({**content.dict()})
     except Exception as error:
@@ -412,9 +427,6 @@ def recover_password(
     if not responce.acknowledged:
         raise mssg
     # ----- End Section -----
-    
-    if settings.EMAILS_ENABLED:
-        send_reset_password_email(email_to=user.get('username'), email=email, token=tokens[0])
     return {"claim": tokens[1]}
     
     
@@ -454,7 +466,7 @@ def reset_password(
         or found_user.get('disabled')
     ):
         raise HTTPException(status_code=400, detail="Password update failed; invalid claim.")
-    password_defer = security.verify_password(
+    password_defer = verify_password(
         plain_password=new_password, hashed_password=found_user.get('password'))
     if not password_defer.status and password_defer.section == 0:
         print(password_defer)
@@ -466,7 +478,7 @@ def reset_password(
             detail="Password update failed; new password is the same as the old one."
         )
     # Update the password
-    hashed_password = security.get_password_hash(new_password)
+    hashed_password = get_password_hash(new_password)
     if not hashed_password.status:
         print(hashed_password)
         raise test_mssg

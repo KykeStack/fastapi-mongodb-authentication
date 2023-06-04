@@ -10,8 +10,6 @@ from dataBase.client import session
 from pymongo.collection import Collection
 from pymongo.database import Database
 from bson.objectid import ObjectId
-from schemas.token import Token
-from schemas.msg import Msg
 
 from jose import jwt, JWTError
 
@@ -49,11 +47,10 @@ async def request(url: str, json_data: dict, headers: dict) -> Union[dict, HTTPE
             ) as responce:
                 data = await responce.json()
         except HTTPException as e:
-            raise 
-        print(data)
+            raise e
         return data 
         
-@router.get('/magic-login', status_code=200, response_model=Token)
+@router.get('/magic-login', status_code=200)
 def validate(magic: str, collection: Collection = Depends(magic_get_db)):
     magic_login_url =  f"{settings.SERVER_HOST}{settings.API_V1_STR}/login/claim"
     try:
@@ -72,7 +69,7 @@ def validate(magic: str, collection: Collection = Depends(magic_get_db)):
     return get_access_data
         
 
-@router.get('/reset-password', status_code=200, response_model=Msg)
+@router.get('/reset-password', status_code=200)
 def validate(token: str, password: Optional[str] = 'password123', collection: Collection = Depends(password_get_db)):
     reset_password_url = f"{settings.SERVER_HOST}{settings.API_V1_STR}/login/reset"  
     try:

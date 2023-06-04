@@ -18,7 +18,7 @@ class PydanticObjectId(BsonObjectId):
 
 class MagicData(BaseModel):
     foreignId: PydanticObjectId
-    email: EmailStr
+    email: str
     updatedAt: datetime = datetime.now()
     createdAt: datetime = datetime.now()
     claimToken: Optional[str] = None
