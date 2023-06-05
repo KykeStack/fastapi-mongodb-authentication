@@ -13,8 +13,6 @@ from dataBase.client import session
 
 totp_factory = TOTP.using(secrets={"1": settings.TOTP_SECRET_KEY}, issuer=settings.SERVER_NAME, alg=settings.TOTP_ALGORITHM)
 
-
-
 def create_access_token(*, subject: Union[str, Any], expires_delta: timedelta = None, force_totp: bool = False) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta

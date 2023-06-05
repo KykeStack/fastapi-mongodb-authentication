@@ -99,7 +99,7 @@ def login_with_magic_link(
             functionName='login_with_magic_link', status=False, section=0, message=error)
         print(error_handler)
         raise mssg  
-    if user == None:
+    if user == None or user.get('deleted'):
       return {"msg": "If that login exists, we'll send you a magic link to your email."}
     if user.get('disabled') or user.get('deleted'):
         # Still permits a timed-attack, but does create ambiguity.
@@ -144,7 +144,8 @@ def validate_magic_link(
     *,
     obj_in: WebToken,
     collection: Collection = Depends(get_user_db),
-    magic_in: FunctionStatus = Depends(get_magic_token)
+    magic_in: FunctionStatus = Depends(get_magic_token),
+    magic_collection: Collection = Depends(get_magic_db)
 ) -> Any:
     """
     Second step of a 'magic link' login.
@@ -157,32 +158,52 @@ def validate_magic_link(
         )
     user: MagicTokenPayload = magic_in.content
     magic_token: MagicTokenPayload = claim_in.content
-    #Get the user
     try: 
-        found_user: dict = collection.find_one(ObjectId(user.sub))
+        magic_db: dict = magic_collection.find_one({"foreignId": ObjectId(user.sub)})
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
+        error_handler = FunctionStatus(
+            functionName="validate_magic_link", status=False, section=0, message=error)
         print(error_handler)
         raise mssg
-    id = found_user.get('_id')
+    if magic_collection == None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )  
+    if magic_db.get('claimToken') != obj_in.claim:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Token",
+        )
+    #Get the user
+    try: 
+        user: dict = collection.find_one(ObjectId(user.sub))
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName="validate_magic_link", status=False, section=1, message=error)
+        print(error_handler)
+        raise mssg
+    id = user.get('_id')
     # Test the claims
     test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
     if (
         (user.sub == magic_token.sub)
         or (user.fingerprint != magic_token.fingerprint)
-        or not found_user
-        or found_user.get('disabled')
+        or not user
+        or user.get('disabled')
+        or user.get('deleted')
     ):
         raise test_mssg
     # Validate that the email is the user's
-    if not found_user.get('emailValidated'):
+    if not user.get('emailValidated'):
         try:
-            found_user_email: dict = collection.find_one({"email": found_user.get('email')})
+            found_user_email: dict = collection.find_one({"email": user.get('email')})
         except Exception as error:
-            error_handler = FunctionStatus(status=False, section=0, message=error)
+            error_handler = FunctionStatus(
+                functionName="validate_magic_link", status=False, section=2, message=error)
             print(error_handler)
             raise mssg
-        if found_user_email == None:
+        if found_user_email == None or found_user_email.get('deleted'):
             raise test_mssg
         if not str(id) == str(found_user_email.get('_id')):
             raise test_mssg
@@ -190,19 +211,22 @@ def validate_magic_link(
     # Check if totp active
     refresh_token = None
     force_totp = True
-    if not found_user.get('totpSecret'):
+    if not user.get('totpSecret'):
         # No TOTP, so this concludes the login validation
         force_totp = False
         refresh_token = security.create_refresh_token(subject=id)
         access_token = security.create_access_token(subject=id, force_totp=force_totp)
         try:
-            data = collection.update_one(
+            data_user = collection.update_one(
                 {"_id": ObjectId(id)}, {"$set": {"refreshToken": refresh_token, "accessToken": access_token}})
+            update_magic = UpdateMagicData(claimToken="")
+            magic_data = magic_collection.update_one({"foreignId": ObjectId(id)}, {"$set": {**update_magic.dict()}})
         except Exception as error:
-            error_handler = FunctionStatus(status=False, section=0, message=error)
+            error_handler = FunctionStatus(
+                functionName="validate_magic_link", status=False, section=3, message=error)
             print(error_handler)
             raise mssg
-        if not data.acknowledged:
+        if not data_user.acknowledged or not magic_data.acknowledged:
             raise mssg
     return {
         "access_token": access_token,
@@ -280,6 +304,11 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
 #     """
 #     For validation of token before enabling TOTP.
 #     """
+    # if not current_user.status:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Login failed"
+    #     )
 #     if current_user.hashed_password:
 #         user = crud.user.authenticate(db, email=current_user.email, password=data_in.password)
 #         if not data_in.password or not user:
@@ -303,6 +332,11 @@ def login_with_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), collecti
 #     data_in: schemas.UserUpdate,
 #     current_user: models.User = Depends(deps.get_current_active_user),
 # ) -> Any:
+    # if not current_user.status:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Login failed"
+    #     )
 #     """
 #     Disable TOTP.
 #     """
@@ -391,7 +425,7 @@ def recover_password(
             functionName='recover_password', status=False, section=0, message=error)
         print(error_handler)
         raise mssg
-    if user == None:
+    if user == None or user.get('deleted'):
         return {"msg": "If that login exists, we'll send you an email to reset your password."}
     if user.get('disabled'):
         raise HTTPException(
@@ -416,7 +450,7 @@ def recover_password(
         send_reset_password_email(email_to=email, username=user.get('username'), token=tokens[0])
     if responce.modified_count != 0:
         return {"claim": tokens[1]}
-    content = MagicData(foreignId=user.get('_id'), email=user.get('username'), claimToken=tokens[1])
+    content = MagicData(foreignId=user.get('_id'), email=user.get('email'), claimToken=tokens[1])
     try:
         responce = pasword_collection.insert_one({**content.dict()})
     except Exception as error:
@@ -437,6 +471,7 @@ def reset_password(
     new_password: str = Body(...),
     claim: str = Body(...),
     magic_in: FunctionStatus = Depends(get_magic_token),
+    pasword_collection: Collection = Depends(get_pasword_db)
 ) -> Any:
     """
     Reset password
@@ -451,23 +486,42 @@ def reset_password(
     magic_token: MagicTokenPayload = claim_in.content
     # Get the user
     try: 
-        found_user: dict = collection.find_one(ObjectId(user.sub))
+        password_db: dict = pasword_collection.find_one({"foreignId": ObjectId(user.sub)})
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
+        error_handler = FunctionStatus(
+            functionName="reset_password", status=False, section=0, message=error)
         print(error_handler)
         raise mssg
-    
+    if password_db == None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )  
+    if password_db.get('claimToken') != claim:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Token",
+        )
+    try: 
+        user: dict = collection.find_one(ObjectId(user.sub))
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName="reset_password", status=False, section=1, message=error)
+        print(error_handler)
+        raise mssg
+     
     # Test the claims
     test_mssg = HTTPException(status_code=400, detail="Password update failed; invalid claim.")
     if (
         (user.sub == magic_token.sub)
         or (user.fingerprint != magic_token.fingerprint)
-        or not found_user
-        or found_user.get('disabled')
+        or not user
+        or user.get('disabled')
+        or user.get('deleted')
     ):
         raise HTTPException(status_code=400, detail="Password update failed; invalid claim.")
     password_defer = verify_password(
-        plain_password=new_password, hashed_password=found_user.get('password'))
+        plain_password=new_password, hashed_password=user.get('password'))
     if not password_defer.status and password_defer.section == 0:
         print(password_defer)
         raise test_mssg
@@ -482,16 +536,17 @@ def reset_password(
     if not hashed_password.status:
         print(hashed_password)
         raise test_mssg
-    id = found_user.get('_id')
+    id = user.get('_id')
     try:
         responce = collection.update_one(
-            {"_id": id},
-                {"$set": {'password' : hashed_password.content}}
-                )
+            {"_id": id}, {"$set": {'password' : hashed_password.content}})
+        update_claim = UpdateMagicData(claimToken="")
+        claim_responce = pasword_collection.update_one({"foreignId": ObjectId(id)}, {"$set": {**update_claim.dict()}})
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
+        error_handler = FunctionStatus(
+            functionName="reset_password", status=False, section=2, message=error)
         print(error_handler)
         raise mssg
-    if not responce.acknowledged:
+    if not responce.acknowledged or not claim_responce.acknowledged:
         raise mssg 
     return {"msg": "Password updated successfully."}

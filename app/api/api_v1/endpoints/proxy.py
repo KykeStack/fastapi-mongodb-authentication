@@ -1,6 +1,6 @@
 from typing import Any
 from pydantic import AnyHttpUrl
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 import httpx
 
 from functionTypes.common import FunctionStatus
@@ -23,6 +23,11 @@ async def proxy_post_request(
     # https://www.python-httpx.org/quickstart/
     # https://github.com/tiangolo/fastapi/issues/1788#issuecomment-698698884
     # https://fastapi.tiangolo.com/tutorial/path-params/#__code_13
+    if not current_user.status:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
+        )
     try:
         data = await request.json()
         headers = {
@@ -41,6 +46,11 @@ async def proxy_post_request(
 async def proxy_get_request(
     *, path: AnyHttpUrl, request: Request, current_user: FunctionStatus = Depends(get_current_active_user),
 ) -> Any:
+    if not current_user.status:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
+        )
     try:
         headers = {
             "Content-Type": request.headers.get("Content-Type", "application/x-www-form-urlencoded"),

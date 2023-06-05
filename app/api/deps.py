@@ -53,23 +53,27 @@ def get_password_hash(password: str) -> FunctionStatus:
 def authenticate_user(current_user: str, password: str) -> FunctionStatus:
     collection: Collection = session['User']
     try:
-        form_user: dict = collection.find_one({"$or": [
-            {'username' : current_user}, {'email': current_user}]})
+        form_user: dict = collection.find_one({"$or": [{'username' : current_user}, {'email': current_user}]})
     except Exception as error:
         error_handler = FunctionStatus(
             functionName='authenticate_user', status=False, section=0, message=f"Mongodb error: {error}")
         print(error_handler)
         return error_handler
-    if form_user == None or form_user.get('deleted') == True:
+    if form_user == None:
         error_handler = FunctionStatus(
             functionName='authenticate_user', status=False, section=1, message=f"User not found in database")
+        print(error_handler)
+        return error_handler
+    if form_user.get('deleted'):
+        error_handler = FunctionStatus(
+            functionName='authenticate_user', status=False, section=2, message=f"User not found in database")
         print(error_handler)
         return error_handler
     unhash_password: FunctionStatus = verify_password(
         plain_password=password, hashed_password=form_user.get("password"))
     if not unhash_password.status:
         error_handler = FunctionStatus(
-            functionName='authenticate_user', status=False, section=2, message="Invalid user password")
+            functionName='authenticate_user', status=False, section=3, message="Invalid user password")
         print(error_handler)
         return error_handler
     return FunctionStatus(status=True, content=form_user)
@@ -149,6 +153,7 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
         token_data = MagicTokenPayload(**payload)
     except (JWTError, ValidationError) as error:
         return FunctionStatus(status=False, section=0, message=f"JWTError, ValidationError: {error}")
+
     return FunctionStatus(status=True, content=token_data)
 
 
@@ -167,6 +172,8 @@ def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
         return FunctionStatus(status=False, section=2, message="Could not validate credentials")
     if form_user.get('disabled'):
         return FunctionStatus(status=False, section=4, message="Inactive user")
+    if form_user.get('deleted'):
+        return FunctionStatus(status=False, section=5, message="Could not validate credentials")
     return FunctionStatus(status=True, content=form_user)
 
 def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
@@ -189,6 +196,8 @@ def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     if form_user.get('disabled'):
         return FunctionStatus(
             functionName="get_access_token", status=False, section=4,message="Inactive user")
+    if form_user.get('deleted'):
+        return FunctionStatus(status=False, section=5, message="Could not validate credentials")
     return FunctionStatus(status=True, content=form_user)
 
 

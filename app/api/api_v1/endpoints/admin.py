@@ -1,6 +1,6 @@
 from typing import Any, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from pydantic.networks import EmailStr
 from sqlalchemy.orm import Session
@@ -46,6 +46,11 @@ def update_user(
     obj_in: schemas.UserUpdate,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
+    if not current_user.status:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
+        )
     """
     Update user.
     """
@@ -76,6 +81,11 @@ def read_user(
     *,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
+    if not current_user.status:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
+        )
     """
     Get current user.
     """
@@ -101,6 +111,11 @@ def request_new_totp(
     *,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
+    if not current_user.status:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
+        )
     """
     Request new keys to enable TOTP on the user account.
     """

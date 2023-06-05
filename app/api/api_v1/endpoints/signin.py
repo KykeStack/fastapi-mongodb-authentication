@@ -19,8 +19,8 @@ from api.deps import get_current_active_user, authenticate_user
 router = APIRouter()
 collection = session['User']
 mssg = HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Unavailable"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
         )
 
 @router.get(
@@ -106,7 +106,7 @@ async def update_current_user(
     if not current_user_valid.status:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid User"
+            detail="Login failed"
         )  
     current_user: dict = current_user_valid.content
     valid_data = form.dict(exclude_none=True)

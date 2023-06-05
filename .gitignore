@@ -24,3 +24,4 @@ pip-log.txt
 .env.local
 .env
 /venv
+/TODO.md
