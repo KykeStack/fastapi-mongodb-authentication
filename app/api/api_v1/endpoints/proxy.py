@@ -3,6 +3,7 @@ from pydantic import AnyHttpUrl
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 import httpx
 
+from schemas.msg import Msg
 from functionTypes.common import FunctionStatus
 from api.deps import get_current_active_user
 
@@ -63,3 +64,9 @@ async def proxy_get_request(
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
 
+@router.get("/tester", response_model=Msg)
+def test_endpoint() -> Any:
+    """
+    Test current endpoint.
+    """
+    return {"msg": "Message returned ok."}

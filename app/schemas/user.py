@@ -105,6 +105,9 @@ class UserOut(BaseModel):
     userExperience: Optional[bool] = None
     createdAt: datetime
     updatedAt: datetime
+    emailValidated: Optional[bool] = None
+    totpSecret: Optional[bool] = None
+    
 
 """
 This class is a model for a sign-up form with 7 required attributes: 

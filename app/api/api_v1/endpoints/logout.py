@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import Annotated, Union, Any
+from datetime import datetime
 
 from functionTypes.common import FunctionStatus
 from schemas.msg import Msg
@@ -42,7 +43,9 @@ def revoke_token(
         )
     id = current_user.content.get('_id')
     try:
-        data = collection.update_one({"_id": ObjectId(id)}, {"$set": {"accessToken": "", "refreshToken": ""}})
+        data = collection.update_one(
+            {"_id": id}, 
+            {"$set": {"accessToken": "", "refreshToken": "", "updatedAt": datetime.now()}})
     except Exception as error:
         error_handler = FunctionStatus(status=False, section=0, message=error)
         print(error_handler)
@@ -50,3 +53,10 @@ def revoke_token(
     if not data.acknowledged:
         raise mssg
     return {"msg": "Token revoked"}
+
+@router.get("/tester", response_model=Msg)
+def test_endpoint() -> Any:
+    """
+    Test current endpoint.
+    """
+    return {"msg": "Message returned ok."}

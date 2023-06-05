@@ -1,18 +1,32 @@
 from schemas.user import SignUpFormIn, SignUpFormOut
 from functionTypes.common import FunctionStatus
 from dataBase.models.user import CreateUser
-
-from fastapi import APIRouter, status, HTTPException
-from fastapi.encoders import jsonable_encoder
-
-from api.deps import get_password_hash
+from schemas.msg import Msg
 
 from localData.Countries import COUNTRIES
+
+from fastapi import APIRouter, HTTPException, status, Depends
+from typing import Union, Any
+
+from fastapi.encoders import jsonable_encoder
+from api.deps import get_password_hash
+from utils.emailsMessage import send_new_account_email
+
 from dataBase.client import session 
+from core.config import settings
+
+from pymongo.collection import Collection
+from pymongo.database import Database
 
 router = APIRouter()
-collection = session['User']
 
+def get_user_db() -> Union[Collection, Database]:
+    try:
+        collection = session['User']
+        yield collection
+    finally:
+        session
+        
 @router.get(
     "/countries", 
     status_code = status.HTTP_200_OK, 
@@ -39,7 +53,7 @@ async def list_of_countries():
         response_model_exclude_unset = True,
         response_description = "Create a new user account"
     )
-async def create_user(form: SignUpFormIn):
+async def create_user(form: SignUpFormIn, collection: Collection = Depends(get_user_db)):
     """
     Create new user without the need to be logged in.
     """
@@ -91,7 +105,17 @@ async def create_user(form: SignUpFormIn):
     if not responce.acknowledged:
         raise mssg
     content.update({'id': str(responce.inserted_id)})
+    if settings.EMAILS_ENABLED and form.email:
+        send_new_account_email(email_to=form.email, username=form.username, password=form.password)
     return content
+
+@router.get("/tester", response_model=Msg)
+def test_endpoint() -> Any:
+    """
+    Test current endpoint.
+    """
+    return {"msg": "Message returned ok."}
+
 
 if __name__ == "__main__":
     ...

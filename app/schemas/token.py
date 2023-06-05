@@ -28,6 +28,7 @@ class RefreshToken(RefreshTokenUpdate):
         orm_mode = True
 
 class Token(BaseModel):
+    id: Optional[str] = None
     access_token: str
     refresh_token: Optional[str] = None
     token_type: str

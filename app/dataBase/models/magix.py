@@ -24,5 +24,5 @@ class MagicData(BaseModel):
     claimToken: Optional[str] = None
     
 class UpdateMagicData(BaseModel):
-    updatedAt: datetime = datetime.now()
+    updatedAt: datetime
     claimToken: Optional[str] = None

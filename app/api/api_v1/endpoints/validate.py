@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Union, Optional
-
 import aiohttp
 import asyncio
 
@@ -12,6 +11,7 @@ from pymongo.database import Database
 from bson.objectid import ObjectId
 
 from jose import jwt, JWTError
+import json
 
 INVALID_IDENTIFIER = 'Please, check identifier.'
 INVALID_JWT = 'Of course! You shall not pass!'
@@ -45,10 +45,11 @@ async def request(url: str, json_data: dict, headers: dict) -> Union[dict, HTTPE
                 headers=headers, 
                 json=json_data
             ) as responce:
-                data = await responce.json()
+                data = await responce.read()
+                hashrate = json.loads(data)
         except HTTPException as e:
-            raise e
-        return data 
+            raise print(e)
+        return hashrate
         
 @router.get('/magic-login', status_code=200)
 def validate(magic: str, collection: Collection = Depends(magic_get_db)):
