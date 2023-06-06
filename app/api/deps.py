@@ -1,11 +1,10 @@
-from typing import Union
+from typing import Union, Annotated, Optional
 from functionTypes.common import FunctionStatus
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from pydantic import ValidationError
-from typing import Annotated 
+from pydantic import ValidationError, parse_obj_as
 
 from schemas.token import TokenPayload, MagicTokenPayload
 from functionTypes.common import FunctionStatus
@@ -50,14 +49,18 @@ def get_password_hash(password: str) -> FunctionStatus:
         return FunctionStatus(status=False, section=0, message=f"CryptContext error: {error}")
     return FunctionStatus(status=True, content=unhash_password)
 
-def authenticate_user(current_user: str, password: str) -> FunctionStatus:
-    collection: Collection = session['User']
+def authenticate_user(current_user: str, password: str, admin: Optional[bool] = False) -> FunctionStatus:
+    if admin:
+        collection = session['Admin']
+    else:
+        collection = session.User
     try:
-        form_user: dict = collection.find_one({"$or": [{'username' : current_user}, {'email': current_user}]})
+        form_user: dict = collection.find_one({'email': current_user})
     except Exception as error:
         error_handler = FunctionStatus(
             functionName='authenticate_user', status=False, section=0, message=f"Mongodb error: {error}")
         print(error_handler)
+        print(form_user)
         return error_handler
     if form_user == None:
         error_handler = FunctionStatus(
@@ -78,8 +81,11 @@ def authenticate_user(current_user: str, password: str) -> FunctionStatus:
         return error_handler
     return FunctionStatus(status=True, content=form_user)
 
-def get_user(by_id: str) -> FunctionStatus:
-    collection: Collection = session['User']
+def get_user(by_id: str, admin: Optional[bool] = False) -> FunctionStatus:
+    if not admin:
+        collection = session.User
+    else: 
+        collection = session['Admin']
     try:
         user: dict = collection.find_one(ObjectId(by_id)) 
     except Exception as error:
@@ -104,14 +110,17 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Fun
                 functionName='get_current_user', status=False, section=0, message=f"Afther jwt.decode found Security Issues")
             print(error_handler)
             return error_handler
-        token_data: TokenData = TokenData(userId=user_id)
-        from_get_user: FunctionStatus = get_user(by_id=token_data.userId)
+        token_data = TokenData(userId=user_id)
+        print(payload)
+        from_get_user: FunctionStatus = get_user(by_id=token_data.userId, admin=payload.get('admin'))
         if not from_get_user.status:
             error_handler = FunctionStatus(
                 functionName='get_current_user', status=False, section=1, message=from_get_user)
             print(error_handler)
             return error_handler
         user = from_get_user.content
+        print(user.get('accessToken'))
+        print(token)
         if user.get('accessToken') != token:
             error_handler = FunctionStatus(
                 functionName='get_current_user', status=False, section=2, message=f"JWT Token is deprecated")
@@ -158,7 +167,7 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
 
 
 def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
-    collection: Collection = session['User']
+    collection = session.User
     token_data = get_token_payload(token)
     if not token_data.refresh:
         return FunctionStatus(status=False, section=0, message="Could not validate credentials")
@@ -177,7 +186,7 @@ def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     return FunctionStatus(status=True, content=form_user)
 
 def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
-    collection: Collection = session['User']
+    collection: Collection = session.User
     token_data = get_token_payload(token)
     if token_data.refresh:
         return FunctionStatus(
@@ -215,12 +224,12 @@ def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
 #     return FunctionStatus(status=True, content=user)
 
 
-# def get_current_active_superuser(
-#     current_user: models.User = Depends(get_current_user),
-# ) -> models.User:
-#     if not crud.user.is_superuser(current_user):
-#         raise HTTPException(status_code=400, detail="The user doesn't have enough privileges")
-#     return current_user
+def get_current_active_superuser(
+    current_user: FunctionStatus = Depends(get_current_user)
+) -> FunctionStatus:
+    if not current_user.status:
+        return FunctionStatus(functionName="get_current_active_superuse", status=False)
+    return current_user
 
 
 # def get_active_websocket_user(*, db: Session, token: str) -> models.User:

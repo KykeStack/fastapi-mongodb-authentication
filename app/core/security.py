@@ -13,12 +13,12 @@ from dataBase.client import session
 
 totp_factory = TOTP.using(secrets={"1": settings.TOTP_SECRET_KEY}, issuer=settings.SERVER_NAME, alg=settings.TOTP_ALGORITHM)
 
-def create_access_token(*, subject: Union[str, Any], expires_delta: timedelta = None, force_totp: bool = False) -> str:
+def create_access_token(*, subject: Union[str, Any], expires_delta: timedelta = None, force_totp: bool = False, admin: Optional[bool] = False) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"exp": expire, "sub": str(subject), "totp": force_totp}
+    to_encode = {"exp": expire, "sub": str(subject), "totp": force_totp, "admin": admin}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 

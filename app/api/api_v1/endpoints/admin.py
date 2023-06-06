@@ -1,92 +1,157 @@
-from typing import Any, List
+from typing import Any, List, Union, Annotated
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
-from pydantic.networks import EmailStr
-from app import crud, models, schemas
+from pymongo.collection import Collection
+from pymongo.database import Database
+from functionTypes.common import FunctionStatus
+from schemas.msg import Msg
+from schemas.token import AccessToken
 
-from app.api import deps
-from app.core.config import settings
-from app.core import security
-from utils.emailsMessage import send_new_account_email
+
+from datetime import datetime, timedelta
+
+from fastapi.security import OAuth2PasswordRequestForm
+
+from api.deps import get_current_active_superuser, authenticate_user
+from core import security
+
+from dataBase.models.user import User, UpdateUser, CreateUser
+from dataBase.client import session
+from bson.objectid import ObjectId
 
 router = APIRouter()
+mssg = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login failed"
+        )
 
-@router.get("/all", response_model=List[schemas.User])
+def get_users_db() -> Union[Collection, Database]:
+    try:
+        collection = session['User']
+        yield collection
+    finally:
+        session
+
+def get_admin_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Admin']
+        yield collection
+    finally:
+        session
+
+
+@router.get(
+    "/all", 
+    response_model=List[User],
+    response_model_exclude_unset = True,
+    response_description= "Get active users",
+    response_model_exclude_none=True
+)
 def read_all_users(
     *,
-    db: Session = Depends(deps.get_db),
+    db: Collection = Depends(get_users_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_active_superuser),
+    current_user: FunctionStatus = Depends(get_current_active_superuser),
 ) -> Any:
     """
     Retrieve all current users.
     """
-    return crud.user.get_multi(db=db, skip=skip, limit=limit)
-
-
-@router.post("/new-totp", response_model=schemas.NewTOTP)
-def request_new_totp(
-    *,
-    current_user: models.User = Depends(deps.get_current_active_user),
-) -> Any:
     if not current_user.status:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Login failed"
+            status_code=status.HTTP_401_UNAUTHORIZED
         )
-    """
-    Request new keys to enable TOTP on the user account.
-    """
-    obj_in = security.create_new_totp(label=current_user.email)
-    # Remove the secret ...
-    obj_in.secret = None
-    return obj_in
+    user_list = []
+    users = db.find({'deleted': False}).limit(limit).skip(skip)
+    for user in users:
+        user.update({'id': str(user.get('_id'))})
+        user_list.append(user)
+    return user_list
 
 
-@router.post("/toggle-state", response_model=schemas.Msg)
+@router.post(
+    "/token", 
+    response_model=AccessToken,
+    response_description="Generate a new JWT token"    
+)
+async def signin_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()], 
+    collection: Collection = Depends(get_admin_db)
+):
+    """
+    Generate only a JWT access token 
+    """
+    valid_username = form_data.username.lower()
+    user: FunctionStatus = authenticate_user(valid_username, form_data.password, admin=True)
+    if not user.status:
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Login failed; incorrect email or password"
+            ) 
+    id = user.content.get('_id')
+    time= user.content.get('timeDelta')
+    access_token = security.create_access_token(subject=id, admin=True, expires_delta=timedelta(minutes=time))
+    try:
+        data = collection.update_one(
+            {"_id": id}, {"$set": {"accessToken": access_token, "updatedAt": datetime.now()}})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    if not data.acknowledged:
+        raise mssg
+    responce = {"id" : str(id), "accessToken": access_token, "tokenType": "bearer"}
+    return responce
+
+@router.put(
+    "/toggle-state",    
+    response_model_exclude_unset = True,
+    response_description= "toggle user state",
+    response_model_exclude_none=True,
+    response_model=Msg
+)
 def toggle_state(
     *,
-    db: Session = Depends(deps.get_db),
-    user_in: schemas.UserUpdate,
-    current_user: models.User = Depends(deps.get_current_active_superuser),
+    db: Collection = Depends(get_users_db),
+    user_in: UpdateUser,
+    current_user: FunctionStatus = Depends(get_current_active_superuser),
 ) -> Any:
     """
     Toggle user state (moderator function)
     """
-    response = crud.user.toggle_user_state(db=db, obj_in=user_in)
-    if not response:
+    if not current_user.status:
+        print(current_user.message)
         raise HTTPException(
-            status_code=400,
-            detail="Invalid request.",
+            status_code=status.HTTP_401_UNAUTHORIZED
         )
+    data = user_in.dict(exclude_none=True)
+    id = data.get('id')
+    data.pop('id')
+    data.update({'updatedAt': datetime.now()})
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Data to update is required"
+        ) 
+    try:
+        responce = db.update_one({"_id":  ObjectId(id)}, {"$set": data})
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName="toggle_state", status=False, section=2, message=error)
+        print(error_handler)
+        raise mssg 
+    if not responce.acknowledged:
+        raise mssg
+    if responce.modified_count == 0:
+        error_handler = FunctionStatus(
+            functionName="toggle_state", status=False, section=2, message="No modify User")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No modify data, user is alredy up to date"
+        ) 
     return {"msg": "User state toggled successfully."}
 
-
-@router.post("/create", response_model=schemas.User)
-def create_user(
-    *,
-    db: Session = Depends(deps.get_db),
-    user_in: schemas.UserCreate,
-    current_user: models.User = Depends(deps.get_current_active_superuser),
-) -> Any:
-    """
-    Create new user (moderator function).
-    """
-    user = crud.user.get_by_email(db, email=user_in.email)
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this username already exists in the system.",
-        )
-    user = crud.user.create(db, obj_in=user_in)
-    if settings.EMAILS_ENABLED and user_in.email:
-        send_new_account_email(email_to=user_in.email, username=user_in.email, password=user_in.password)
-    return user
-
-
-@router.get("/tester", response_model=schemas.Msg)
+@router.get("/tester", response_model=Msg)
 def test_endpoint() -> Any:
     """
     Test current endpoint.

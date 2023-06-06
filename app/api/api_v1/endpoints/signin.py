@@ -163,6 +163,23 @@ async def update_current_user(
         {'id': str(current_user.get('_id')), 'createdAt': current_user.get('createdAt'), 'updatedAt' : time})
     return valid_data
         
+# @router.post("/new-totp", response_model=schemas.NewTOTP)
+# def request_new_totp(
+#     *,
+#     current_user: models.User = Depends(get_current_active_user),
+# ) -> Any:
+#     if not current_user.status:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Login failed"
+#         )
+#     """
+#     Request new keys to enable TOTP on the user account.
+#     """
+#     obj_in = security.create_new_totp(label=current_user.email)
+#     # Remove the secret ...
+#     obj_in.secret = None
+#     return obj_in
 
 @router.post(
     "/token", 

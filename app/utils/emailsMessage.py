@@ -86,8 +86,8 @@ def send_magic_login_email(email_to: str, token: str) -> None:
     with open(Path(settings.EMAIL_TEMPLATES_DIR) / "magic_login.html") as f:
         template_str = f.read()
     server_host = settings.SERVER_HOST
-    #link = f"{server_host}?token={token}"
-    link = f"{server_host}{settings.API_V1_STR}/validate/magic-login?magic={token}"
+    link = f"{server_host}?token={token}"
+    #link = f"{server_host}{settings.API_V1_STR}/validate/magic-login?magic={token}"
     send_email(
         email_to=email_to,
         subject_template=subject,
@@ -106,8 +106,8 @@ def send_reset_password_email(email_to: str, username: str, token: str) -> None:
     with open(Path(settings.EMAIL_TEMPLATES_DIR) / "reset_password.html") as f:
         template_str = f.read()
     server_host = settings.SERVER_HOST
-    # link = f"{server_host}?token={token}"
-    link = f"{server_host}{settings.API_V1_STR}/validate/reset-password?token={token}"
+    link = f"{server_host}?token={token}"
+    #link = f"{server_host}{settings.API_V1_STR}/validate/reset-password?token={token}"
     send_email(
         email_to=email_to,
         subject_template=subject,
@@ -137,6 +137,27 @@ def send_new_account_email(email_to: str, username: str, password: str) -> None:
             "username": username,
             "password": password,
             "email": email_to,
+            "link": link,
+        },
+    )
+
+
+def send_delete_account_email(data: EmailValidation) -> None:
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - {data.subject.capitalize()}, Confirm your request"
+    with open(Path(settings.EMAIL_TEMPLATES_DIR) / "delete_account.html") as f:
+        template_str = f.read()
+    server_host = settings.SERVER_HOST
+    link = f"{server_host}?token={data.token}"
+    send_email(
+        email_to=data.email,
+        subject_template=subject,
+        html_template=template_str,
+        environment={
+            "project_name": settings.PROJECT_NAME,
+            "username": data.subject.capitalize(),
+            "email": data.email,
+            "valid_minutes": int(settings.ACCESS_TOKEN_EXPIRE_MINUTES),
             "link": link,
         },
     )

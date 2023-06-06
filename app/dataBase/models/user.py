@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime
 from bson.objectid import ObjectId as BsonObjectId
 
-from schemas.user import FullName
+from schemas.user import FullName, Gender
 
 class PydanticObjectId(BsonObjectId):
     @classmethod
@@ -23,7 +23,7 @@ class CreateUser(BaseModel):
     password: str
     fullName: FullName
     birthdate: str
-    gender: str
+    gender: Gender
     country: str
     phoneNumber: Optional[str] = None
     userExperience: Optional[bool] = True
@@ -40,6 +40,7 @@ class CreateUser(BaseModel):
 
 class User(BaseModel):
     _id = PydanticObjectId
+    id: str
     username: str
     email: EmailStr
     password: str
@@ -58,3 +59,11 @@ class User(BaseModel):
     refreshToken: Optional[str] = None
     disabled: bool
     deleted: bool
+
+class UpdateUser(BaseModel):
+    id: str
+    emailValidated: Optional[bool] = None
+    totpSecret: Optional[bool]= None
+    totpCounter: Optional[str] = None
+    disabled: Optional[bool]= None
+    deleted: Optional[bool]= None
