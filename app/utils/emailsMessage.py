@@ -86,8 +86,7 @@ def send_magic_login_email(email_to: str, token: str) -> None:
     with open(Path(settings.EMAIL_TEMPLATES_DIR) / "magic_login.html") as f:
         template_str = f.read()
     server_host = settings.SERVER_HOST
-    link = f"{server_host}?token={token}"
-    #link = f"{server_host}{settings.API_V1_STR}/validate/magic-login?magic={token}"
+    link = f"{server_host}?/magic-link/token={token}"
     send_email(
         email_to=email_to,
         subject_template=subject,
@@ -106,8 +105,7 @@ def send_reset_password_email(email_to: str, username: str, token: str) -> None:
     with open(Path(settings.EMAIL_TEMPLATES_DIR) / "reset_password.html") as f:
         template_str = f.read()
     server_host = settings.SERVER_HOST
-    link = f"{server_host}?token={token}"
-    #link = f"{server_host}{settings.API_V1_STR}/validate/reset-password?token={token}"
+    link = f"{server_host}?/reset-password?token={token}"
     send_email(
         email_to=email_to,
         subject_template=subject,

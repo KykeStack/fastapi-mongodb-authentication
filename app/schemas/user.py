@@ -85,10 +85,10 @@ class UserIn(BaseModel):
     username: str
     email: EmailStr
     password: Optional[str] = None 
-    fullName: FullName
-    birthdate: str
-    gender: str
-    country: str
+    fullName: Optional[FullName] = None 
+    birthdate: Optional[str] = None
+    gender: Optional[str] = None
+    country: Optional[str] = None
     phoneNumber: Optional[str] = None
     userExperience: Optional[bool] = True
 
@@ -96,10 +96,10 @@ class UserIn(BaseModel):
 class UserOut(BaseModel):
     id: str
     email: Optional[str] = None 
-    fullName: Optional[OptionalFullName] = None 
+    fullName: Optional[FullName] = None 
     username: Optional[str] = None 
     birthdate: Optional[str] = None 
-    gender: Optional[Gender]
+    gender: Optional[Gender] = None
     country: Optional[str] = None 
     phoneNumber: Optional[str] = None 
     userExperience: Optional[bool] = None
@@ -126,13 +126,12 @@ class SignUpFormIn(BaseModel):
     password: Annotated[ 
         str,
         Field(regex= "((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[\W]).{8,64})")]
-    fullName: FullName
+    fullName: Optional[FullName] = None
     username: str
-    birthdate: Annotated[str, Field(max_length=25)] 
-    gender: Gender
-    country: Annotated[str, Field(max_length=25)] 
+    birthdate: Optional[str] = None
+    gender: Optional[Gender] = None
+    country: Optional[str] = None
     phoneNumber: Optional[str] = None 
-    privacyPolicy: Optional[bool] = True
     userExperience: Optional[bool]
 
     @validator("country")
@@ -182,10 +181,10 @@ class SignUpFormOut(BaseModel):
     id: Optional[str] = None
     username: str
     email: EmailStr
-    fullName: FullName
-    birthdate: str
-    gender: str
-    country: str
+    fullName: Optional[FullName] = None 
+    birthdate: Optional[str] = None
+    gender: Optional[str] = None
+    country: Optional[str] = None
     phoneNumber: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime

@@ -21,10 +21,10 @@ class CreateUser(BaseModel):
     username: str
     email: EmailStr
     password: str
-    fullName: FullName
-    birthdate: str
-    gender: Gender
-    country: str
+    fullName: Optional[FullName] = None
+    birthdate: Optional[str] = None
+    gender: Optional[Gender] = None
+    country: Optional[str] = None
     phoneNumber: Optional[str] = None
     userExperience: Optional[bool] = True
     updatedAt: datetime = datetime.now()
@@ -44,12 +44,12 @@ class User(BaseModel):
     username: str
     email: EmailStr
     password: str
-    fullName: FullName
-    birthdate: str
-    gender: str
-    country: str
+    fullName: Optional[FullName] = None
+    birthdate: Optional[str] = None
+    gender: Optional[Gender] = None
+    country: Optional[str] = None
     phoneNumber: Optional[str] = None
-    userExperience: bool
+    userExperience: Optional[bool] = True
     updatedAt: datetime 
     createdAt: datetime 
     emailValidated: bool 

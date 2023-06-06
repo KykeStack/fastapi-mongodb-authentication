@@ -51,6 +51,7 @@ async def list_of_countries():
         status_code = status.HTTP_201_CREATED, 
         response_model = SignUpFormOut,
         response_model_exclude_unset = True,
+        response_model_exclude_none= True,
         response_description = "Create a new user account"
     )
 async def create_user(form: SignUpFormIn, collection: Collection = Depends(get_user_db)):
@@ -61,11 +62,6 @@ async def create_user(form: SignUpFormIn, collection: Collection = Depends(get_u
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service Unavailable"
             )
-    if form.privacyPolicy == False:
-        raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST,
-            detail = "The privacy policy is not accepted"
-        )
     try:
         find_email = collection.find_one({"email": form.email})
     except Exception as error:

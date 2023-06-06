@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from api.api_v1.endpoints import (
-    validate,
     signin,
     signup,
     login,
@@ -18,7 +17,6 @@ api_router.include_router(logout.router, prefix="/logout", tags=["Logout"])
 api_router.include_router(proxy.router, prefix="/proxy", tags=["Proxy"])
 api_router.include_router(services.router, prefix="/service", tags=["Service"])
 
-api_router.include_router(validate.router, prefix="/validate", tags=["validate"])
 api_router.include_router(delete.router, prefix="/delete", tags=["Delete"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
