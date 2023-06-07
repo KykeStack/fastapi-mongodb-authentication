@@ -209,21 +209,6 @@ def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
         return FunctionStatus(status=False, section=5, message="Could not validate credentials")
     return FunctionStatus(status=True, content=form_user)
 
-
-# def get_current_active_user(
-#     current_user: FunctionStatus = Depends(get_current_user),
-# ) -> FunctionStatus:
-#     if not current_user.status:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail='Could not validate credentials'
-#         )
-#     user = parse_obj_as(User, current_user.content)
-#     if not user.disabled:
-#         raise HTTPException(status_code=400, detail="Inactive user")
-#     return FunctionStatus(status=True, content=user)
-
-
 def get_current_active_superuser(
     current_user: FunctionStatus = Depends(get_current_user)
 ) -> FunctionStatus:
@@ -231,7 +216,7 @@ def get_current_active_superuser(
         return FunctionStatus(functionName="get_current_active_superuse", status=False)
     return current_user
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 # def get_active_websocket_user(*, db: Session, token: str) -> models.User:
 #     try:
 #         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
@@ -248,7 +233,6 @@ def get_current_active_superuser(
 #         raise ValidationError("Inactive user")
 #     return user
 
-# ----------------------------------------------------------------------------------------------------------------------------------
 # async def get_current_user(
 #     collection: Collection = Depends(get_db), 
 #     token: str = Depends(reusable_oauth2)
