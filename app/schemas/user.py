@@ -7,71 +7,78 @@ from datetime import datetime
 
 import phonenumbers
 
+def validate_names(name):
+    if len(name) > 25:
+        raise ValueError(f"Invalid Length of name {name}")
+    validate_name = name.capitalize()
+    return validate_name
+
+def validate_country(country):
+    try:
+        if country in COUNTRIES:
+            index : int = COUNTRIES.index(country)
+            return COUNTRIES[index]
+        else:
+            raise ValueError(f"Country name: {country}, not Found")
+    except Exception as e:
+        raise e
     
+def validate_birthdate(date):
+        valid_formats : list[str] = [
+            '%d/%m/%Y', '%d-%m-%Y', '%Y/%d/%m', '%Y-%d-%m', '%d %B, %Y']
+        for format in valid_formats:
+            try:
+                return str(datetime.strptime(date, format).date())
+            except Exception:
+                pass
+        raise ValueError(f"Invalid birthdate: {date}. List of valid formats:{valid_formats}")
+    
+def validate_phonenumber(phonenumber):
+    if phonenumber is not None:
+        try:
+            parsed = phonenumbers.parse(phonenumber)
+            if phonenumbers.is_valid_number(parsed):
+                joined_phonenumber = phonenumber.replace(" ", "")
+                return joined_phonenumber
+            else:
+                raise ValueError(f"Invalid phone number: {phonenumber}")
+        except Exception as e:
+            raise ValueError(e)
+    
+def validate_username(username):
+    assert username.isalnum(), 'must be alphanumeric'
+    validate_username = username.capitalize()
+    return validate_username
+
+
 class Gender(str, Enum):
     not_given = 'not_given'
     male = 'male'
     female = 'female'
     other = 'other'
 
-"""
-This class defines a model for a full name with four attributes: 
-- name, second_name, surname, and second_surname. 
-
-The Annotated function is used to specify the types and validation rules for each attribute, 
-with additional metadata such as a title and description. The name and surname attributes are 
-required strings, while second_name and second_surname are optional strings. All attributes 
-have a maximum length of 25 characters and a minimum length of 2. 
-
-This class inherits from BaseModel and has a configuration that sets its title to "Full Name".
-"""
-
 class FullName(BaseModel):
-    name: Annotated[str, Field(
-        title = "User first name",
-        description = "Required field",
-        max_length = 25, 
-        min_length = 2)]  
-     
-    secondName: Annotated[Optional[str], Field(
-        title = "User second name",
-        description = "Optional field",
-        max_length = 25,
-        min_length=2)] = None
+    name: str
+    secondName: Optional[str] = None
+    surname: str
+    secondSurname: Optional[str] = None
     
-    surname: Annotated[str, Field(
-        title = "User first surname",
-        description = "Required field",
-        max_length = 25,
-        min_length = 2)]  
-    
-    secondSurname: Annotated[Optional[str], Field(
-        title = "User second surname",
-        description = "Optional field",
-        max_length=25, 
-        min_length=2)] = None
-        
     @validator("name")
-    def lower_name(cls, value: str):
-        validate_name = value.lower().capitalize()
-        return validate_name
-    
+    def lower_name(cls, value):
+        validate_names(value)
+        
     @validator("secondName")
-    def lower_secondName(cls, value: str):
-        if value is not None:
-            validate_secondName = value.lower().capitalize()
-            return validate_secondName
+    def lower_secondName(cls, value):
+        validate_names(value)
 
     @validator("surname")
     def lower_surname(cls, value: str):
-        validate_surname = value.lower().capitalize()
-        return validate_surname
+        validate_names(value)
 
     @validator("secondSurname")
     def lower_secondSurname(cls, value: str):
-        if value is not None:
-            validate_secondSurname = value.lower().capitalize()
-            return validate_secondSurname
+        validate_names(value)
+
 
 class OptionalFullName(FullName):
     name: Optional[str]
@@ -108,19 +115,7 @@ class UserOut(BaseModel):
     emailValidated: Optional[bool] = None
     totpSecret: Optional[bool] = None
     
-
-"""
-This class is a model for a sign-up form with 7 required attributes: 
--email, password, name, birthdate, country, phone_number, and privacy_policy. 
-
-It also has an optional attributes:
-- user_experience. 
-The password, country, phone_number, and birthdate attributes have custom 
-validators that ensure they meet specific criteria. 
-The name attribute is an instance of another class called fullName. 
-This class inherits from BaseModel and has a configuration that sets its title to "Sing Up form".
-"""
-
+    
 class SignUpFormIn(BaseModel):
     email: EmailStr
     password: Annotated[ 
@@ -136,46 +131,19 @@ class SignUpFormIn(BaseModel):
 
     @validator("country")
     def parse_country(cls, value):
-         try:
-            if value in COUNTRIES:
-                index : int = COUNTRIES.index(value)
-                return COUNTRIES[index]
-            else:
-                raise ValueError(f"Country name: {value}, not Found")
-         except Exception as e:
-             raise e
-         
+        validate_country(value)
+
     @validator("phoneNumber")
     def parse_phone_number(cls, value):
-        if value is not None:
-            try:
-                parsed = phonenumbers.parse(value)
-                if phonenumbers.is_valid_number(parsed):
-                    joined_phonenumber = value.replace(" ", "")
-                    return joined_phonenumber
-                else:
-                    raise ValueError(f"Invalid phone number: {value}")
-            except Exception as e:
-                raise ValueError(e)
+        validate_phonenumber(value)
     
     @validator("birthdate")
     def parse_birthdate(cls, value):
-        date = value
-        valid_formats : list[str] = [
-            '%d/%m/%Y', '%d-%m-%Y', '%Y/%d/%m', '%Y-%d-%m', '%d %B, %Y']
-        for format in valid_formats:
-            try:
-                return str(datetime.strptime(date, format).date())
-            except Exception:
-                pass
-        raise ValueError(f"Invalid birthdate: {value}. List of valid formats:{valid_formats}")
+        validate_birthdate(value)
     
     @validator('username')
     def username_alphanumeric(cls, value):
-        assert value.isalnum(), 'must be alphanumeric'
-        validate_username = value.lower()
-        return validate_username
-
+        validate_username(value)
 
 class SignUpFormOut(BaseModel):  
     id: Optional[str] = None
@@ -209,45 +177,19 @@ class UpdateUserData(BaseModel):
     
     @validator("country")
     def parse_country(cls, value):
-         try:
-            if value in COUNTRIES:
-                index : int = COUNTRIES.index(value)
-                return COUNTRIES[index]
-            else:
-                raise ValueError(f"Country name: {value}, not Found")
-         except Exception as e:
-             raise e
+        validate_country(value)
          
     @validator("phoneNumber")
     def parse_phone_number(cls, value):
-        if value is not None:
-            try:
-                parsed = phonenumbers.parse(value)
-                if phonenumbers.is_valid_number(parsed):
-                    joined_phonenumber = value.replace(" ", "")
-                    return joined_phonenumber
-                else:
-                    raise ValueError(f"Invalid phone number: {value}")
-            except Exception as e:
-                raise ValueError(e)
+        validate_phonenumber(value)
     
     @validator("birthdate")
     def parse_birthdate(cls, value):
-        date = value
-        valid_formats : list[str] = [
-            '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d', '%Y-%m-%d', '%d %B, %Y']
-        for format in valid_formats:
-            try:
-                return str(datetime.strptime(date, format).date())
-            except Exception:
-                pass
-        raise ValueError(f"Invalid birthdate: {value}. List of valid formats:{valid_formats}")
+        validate_birthdate(value)
     
     @validator('username')
     def username_alphanumeric(cls, value):
-        assert value.isalnum(), 'must be alphanumeric'
-        validate_username = value.lower()
-        return validate_username
-    
+        validate_username(value)
+        
 if __name__ == "__main__":
     ...
