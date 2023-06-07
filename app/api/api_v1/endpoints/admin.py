@@ -7,7 +7,6 @@ from functionTypes.common import FunctionStatus
 from schemas.msg import Msg
 from schemas.token import AccessToken
 
-
 from datetime import datetime, timedelta
 
 from fastapi.security import OAuth2PasswordRequestForm
@@ -120,7 +119,9 @@ def toggle_state(
     Toggle user state (moderator function)
     """
     if not current_user.status:
-        print(current_user.message)
+        error_handler = FunctionStatus(
+        functionName="toggle_state", status=False, section=0, message=current_user.message)
+        print(error_handler)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED
         )
@@ -139,12 +140,22 @@ def toggle_state(
         error_handler = FunctionStatus(
             functionName="toggle_state", status=False, section=2, message=error)
         print(error_handler)
-        raise mssg 
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error)
+        ) 
     if not responce.acknowledged:
         raise mssg
-    if responce.modified_count == 0:
+    if responce.matched_count == 0:
         error_handler = FunctionStatus(
             functionName="toggle_state", status=False, section=2, message="No modify User")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        ) 
+    if responce.modified_count == 0:
+        error_handler = FunctionStatus(
+            functionName="toggle_state", status=False, section=3, message="user is alredy up to date")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No modify data, user is alredy up to date"

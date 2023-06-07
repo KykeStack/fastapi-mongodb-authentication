@@ -36,6 +36,14 @@ def get_user_db() -> Union[Collection, Database]:
     finally:
         session
 
+def get_delete_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Delete']
+        yield collection
+    finally:
+        session
+
+
 @router.post(
     "/users/me", 
     response_model=WebToken,  
@@ -44,7 +52,8 @@ def get_user_db() -> Union[Collection, Database]:
     response_model_exclude_none=True
 )
 async def delete_user(
-    current_user: Annotated[FunctionStatus, Depends(get_current_active_user)]
+    current_user: Annotated[FunctionStatus, Depends(get_current_active_user)],
+    collection: Collection = Depends(get_user_db)
 ):
     """
     Delete user account
@@ -59,7 +68,15 @@ async def delete_user(
                 headers={"WWW-Authenticate": "Bearer"}
             )
     user = current_user.content
-    tokens = security.create_magic_tokens(subject=user.get('_id')) 
+    id = user.get('_id')
+    try: 
+        user: dict = collection.update_one({'_id': id}, {'delete'})
+    except Exception as error:
+        error_handler = FunctionStatus(
+            functionName="delete_user", status=False, section=1, message=error)
+        print(error_handler)
+        raise mssg
+    tokens = security.create_magic_tokens(subject=id) 
     user_email = user.get('email')
     if settings.EMAILS_ENABLED:
         # Send email with user.email as subject
@@ -101,16 +118,15 @@ def confirm_delete_user(
         print(error_handler)
         raise mssg
     # Test the claims
-    id = user.get('_id')
     test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
     if (
         (token_user.sub == magic_token.sub)
         or (token_user.fingerprint != magic_token.fingerprint)
         or (user == None)
         or (user.get('disabled'))
-        or (user.get('deleted'))
     ):
         raise test_mssg
+    id = user.get('_id')
     try:
         data_user = collection.delete_one({"_id": id})
     except Exception as error:

@@ -1,5 +1,6 @@
 from email_validator import  EmailNotValidError, validate_email 
 from pydantic import BaseModel, EmailStr, validator
+from schemas.user import UserOut
 
 def email_validation(email):
     valid_email_format = email.lower()
@@ -16,7 +17,7 @@ class EmailContent(BaseModel):
     content: str
     @validator("email")
     def email_in(cls, value):
-        email_validation(value)
+        return email_validation(value)
 
 class EmailValidation(BaseModel):
     email: EmailStr
@@ -24,5 +25,9 @@ class EmailValidation(BaseModel):
     token: str
     @validator("email")
     def email_in(cls, value):
-        email_validation(value)
+        return email_validation(value)
+
+class UserAndEmai(BaseModel):
+    userUpdated: UserOut
+    claim: str
         

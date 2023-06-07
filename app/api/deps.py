@@ -1,10 +1,10 @@
 from typing import Union, Annotated, Optional
 from functionTypes.common import FunctionStatus
 
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from pydantic import ValidationError, parse_obj_as
+from pydantic import ValidationError
 
 from schemas.token import TokenPayload, MagicTokenPayload
 from functionTypes.common import FunctionStatus
@@ -65,11 +65,6 @@ def authenticate_user(current_user: str, password: str, admin: Optional[bool] = 
     if form_user == None:
         error_handler = FunctionStatus(
             functionName='authenticate_user', status=False, section=1, message=f"User not found in database")
-        print(error_handler)
-        return error_handler
-    if form_user.get('deleted'):
-        error_handler = FunctionStatus(
-            functionName='authenticate_user', status=False, section=2, message=f"User not found in database")
         print(error_handler)
         return error_handler
     unhash_password: FunctionStatus = verify_password(
@@ -135,9 +130,6 @@ async def get_current_active_user(current_user: Annotated[FunctionStatus, Depend
     if user.get('disabled'):
         return FunctionStatus(
             functionName='get_current_active_user', status=False, section=1, message=f"Invalid User")
-    if user.get('deleted'):
-        return FunctionStatus(
-            functionName='get_current_active_user', status=False, section=2, message=f"User not found")
     is_admin = current_user.metadata
     if is_admin.get('admin'):
         raise HTTPException(
@@ -178,14 +170,12 @@ def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
         form_user: dict = collection.find_one(ObjectId(token_data.sub))
     except Exception as e:
         return FunctionStatus(status=False, section=1, message=f"Mongodb error: {e}")
-    if form_user == None or form_user.get('deleted'):
+    if form_user == None:
         return FunctionStatus(status=False, section=3, message="User not found")
     if token != form_user.get('refreshToken'):
         return FunctionStatus(status=False, section=2, message="Could not validate credentials")
     if form_user.get('disabled'):
         return FunctionStatus(status=False, section=4, message="Inactive user")
-    if form_user.get('deleted'):
-        return FunctionStatus(status=False, section=5, message="Could not validate credentials")
     return FunctionStatus(status=True, content=form_user)
 
 def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
@@ -199,17 +189,12 @@ def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     except Exception as e:
         return FunctionStatus(
             functionName="get_access_token", status=False, section=1, message=f"Mongodb error: {e}")
-    if form_user == None or form_user.get('deleted'):
+    if form_user == None:
         return FunctionStatus(
             functionName="get_access_token", status=False, section=3, message="User not found")
     if token != form_user.get('accessToken'):
         return FunctionStatus(
             functionName="get_access_token", status=False, section=2, message="Could not validate credentials")
-    if form_user.get('disabled'):
-        return FunctionStatus(
-            functionName="get_access_token", status=False, section=4,message="Inactive user")
-    if form_user.get('deleted'):
-        return FunctionStatus(status=False, section=5, message="Could not validate credentials")
     return FunctionStatus(status=True, content=form_user)
 
 def get_current_active_superuser(

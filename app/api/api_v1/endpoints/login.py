@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from datetime import datetime
 
 from schemas.token import WebToken, Token
+from schemas.token import AccessToken
 from schemas.msg import Msg
 
 from core import security
@@ -98,8 +99,6 @@ def login_with_magic_link(
         raise mssg  
     if user == None:
       return {"msg": "If that login exists, we'll send you a magic link to your email."}
-    if  user.get('deleted'):
-        return {"msg": "If that login exists, we'll send you a magic link to your email."}
     if user.get('disabled'):
         # Still permits a timed-attack, but does create ambiguity.
         raise HTTPException(status_code=400, detail="A link to activate your account has been emailed.")
@@ -160,7 +159,6 @@ def validate_magic_link(
             functionName="validate_magic_link", status=False, section=0, message=error)
         print(error_handler)
         raise mssg
-    id = user.get('_id')
     # Test the claims
     test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
     if (
@@ -168,9 +166,9 @@ def validate_magic_link(
         or (user_token.fingerprint != magic_token.fingerprint)
         or (user == None)
         or (user.get('disabled'))
-        or (user.get('deleted'))
     ):
         raise test_mssg
+    id = user.get('_id')
     # Validate that the email is the user's
     if not user.get('emailValidated'):
         try:
@@ -182,7 +180,7 @@ def validate_magic_link(
             raise mssg
         if found_user_email == None:
             raise test_mssg
-        if found_user_email.get('deleted') or not str(id) == str(found_user_email.get('_id')):
+        if not str(id) == str(found_user_email.get('_id')):
             raise test_mssg
     # Verify if token has been claim before
     try: 
@@ -231,8 +229,40 @@ def validate_magic_link(
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
+    
+@router.post(
+    "/token", 
+    response_model=AccessToken,
+    response_description="Generate a new JWT token"    
+)
+async def signin_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()], 
+    collection: Collection = Depends(get_user_db)
+):
+    """
+    Generate only a JWT access token 
+    """
+    user: FunctionStatus = authenticate_user(form_data.username, form_data.password)
+    if not user.status:
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Login failed; incorrect email or password"
+            ) 
+    id = user.content.get('_id')
+    access_token = security.create_access_token(subject=id)
+    try:
+        data = collection.update_one(
+            {"_id": id}, {"$set": {"accessToken": access_token, "updatedAt": datetime.now()}})
+    except Exception as error:
+        error_handler = FunctionStatus(status=False, section=0, message=error)
+        print(error_handler)
+        raise mssg
+    if not data.acknowledged:
+        raise mssg
+    responce = {"id" : str(id), "accessToken": access_token, "tokenType": "bearer"}
+    return responce
 
-@router.post("/oauth/refresh", response_model=Token)
+@router.post("/token/refresh", response_model=Token)
 def login_with_oauth2(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     collection: Collection = Depends(get_user_db)
@@ -440,8 +470,6 @@ def recover_password(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Recover failed; invalid claim."
         ) 
-    if  user.get('deleted'):
-        return {"msg": "If that login exists, we'll send you an email to reset your password."}
     # Get those tokens, baby!!
     tokens = security.create_magic_tokens(subject=user.get('_id'))     
     # Set the Token db to be claim 
@@ -509,7 +537,6 @@ def reset_password(
         or (token_user.fingerprint != magic_token.fingerprint)
         or (user == None)
         or (user.get('disabled'))
-        or (user.get('deleted'))
     ):
         raise HTTPException(status_code=400, detail="Password update failed; invalid claim.")
     password_defer = verify_password(

@@ -8,10 +8,11 @@ from datetime import datetime
 import phonenumbers
 
 def validate_names(name):
-    if len(name) > 25:
-        raise ValueError(f"Invalid Length of name {name}")
-    validate_name = name.capitalize()
-    return validate_name
+    if name != None:
+        if len(name) > 25:
+            raise ValueError(f"Invalid Length of name {name}")
+        validate_name = name.capitalize()
+        return validate_name
 
 def validate_country(country):
     try:
@@ -65,19 +66,19 @@ class FullName(BaseModel):
     
     @validator("name")
     def lower_name(cls, value):
-        validate_names(value)
+        return validate_names(value)
         
     @validator("secondName")
     def lower_secondName(cls, value):
-        validate_names(value)
+        return validate_names(value)
 
     @validator("surname")
     def lower_surname(cls, value: str):
-        validate_names(value)
+        return validate_names(value)
 
     @validator("secondSurname")
     def lower_secondSurname(cls, value: str):
-        validate_names(value)
+        return validate_names(value)
 
 
 class OptionalFullName(FullName):
@@ -131,19 +132,19 @@ class SignUpFormIn(BaseModel):
 
     @validator("country")
     def parse_country(cls, value):
-        validate_country(value)
+        return validate_country(value)
 
     @validator("phoneNumber")
     def parse_phone_number(cls, value):
-        validate_phonenumber(value)
+        return validate_phonenumber(value)
     
     @validator("birthdate")
     def parse_birthdate(cls, value):
-        validate_birthdate(value)
+        return validate_birthdate(value)
     
     @validator('username')
     def username_alphanumeric(cls, value):
-        validate_username(value)
+        return validate_username(value)
 
 class SignUpFormOut(BaseModel):  
     id: Optional[str] = None
@@ -177,19 +178,19 @@ class UpdateUserData(BaseModel):
     
     @validator("country")
     def parse_country(cls, value):
-        validate_country(value)
+        return validate_country(value)
          
     @validator("phoneNumber")
     def parse_phone_number(cls, value):
-        validate_phonenumber(value)
+        return validate_phonenumber(value)
     
     @validator("birthdate")
     def parse_birthdate(cls, value):
-        validate_birthdate(value)
+        return validate_birthdate(value)
     
     @validator('username')
     def username_alphanumeric(cls, value):
-        validate_username(value)
+        return validate_username(value)
         
 if __name__ == "__main__":
     ...

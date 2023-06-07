@@ -1,12 +1,10 @@
 
 from schemas.user import UserOut, UpdateUserData
-from schemas.token import AccessToken
 from schemas.msg import Msg
 from schemas.token import WebToken
-from schemas.emails import EmailValidation
+from schemas.emails import EmailValidation, UserAndEmai
 
 from fastapi import APIRouter, HTTPException, status, Depends
-from fastapi.security import OAuth2PasswordRequestForm
 
 from functionTypes.common import FunctionStatus
 from modules.ValidateData import validate_data
@@ -90,8 +88,9 @@ async def get_current_user(
 @router.put(
     "/users/me", 
     response_description= "Update the current user data",
-    response_model=UserOut,
-    response_model_exclude_none=True
+    response_model= Union[UserOut, UserAndEmai],
+    response_model_exclude_none=True,
+    response_model_exclude_unset=True
 )
 async def update_current_user(
     current_user_valid: Annotated[FunctionStatus, Depends(get_current_active_user)],
@@ -114,6 +113,11 @@ async def update_current_user(
             detail="Data to update is required"
         )  
     if form.email != None:
+        if current_user.get('email') == form.email:
+            raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="A new email is required"
+                )  
         try:
             find_email = collection.find_one({'email': form.email})
         except Exception as error:
@@ -121,12 +125,17 @@ async def update_current_user(
                 functionName="update_current_user", status=False, section=0, message=error)
             print(error_handler)
             raise mssg
-        if find_email is not None:
+        if find_email != None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Email already exists"
                 )
     if form.username != None:
+        if current_user.get('username') == form.username:
+            raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="A new username is required"
+                )  
         try:
             find_username = collection.find_one({"username": form.username})
         except Exception as error:
@@ -134,7 +143,7 @@ async def update_current_user(
                 functionName="update_current_user", status=False, section=1, message=error)
             print(error_handler)
             raise mssg
-        if find_username is not None:
+        if find_username != None:
             raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Username already exists"
@@ -145,8 +154,20 @@ async def update_current_user(
             status_code=status.HTTP_409_CONFLICT,
             detail=data.message
         )
+    user: dict = data.content
+    send_email = False
+    if form.email != None and current_user.get('emailValidated'):
+        tokens = security.create_magic_tokens(subject=current_user.get('_id')) 
+        if settings.EMAILS_ENABLED:
+            usernme = current_user.get('username')
+            if form.username:
+                usernme = form.username
+            # Send email with user.email as subject
+            data = EmailValidation(email=form.email, subject=usernme, token=tokens[0])
+            user.update({'emailValidated': False})
+            send_email_validation_email(data=data)
+            send_email = True
     time: datetime = datetime.now()     
-    user = data.content
     user.update({'updatedAt' : time})
     try:
         responce = collection.update_one(
@@ -161,6 +182,8 @@ async def update_current_user(
         raise mssg
     valid_data.update(
         {'id': str(current_user.get('_id')), 'createdAt': current_user.get('createdAt'), 'updatedAt' : time})
+    if send_email:
+        return UserAndEmai(userUpdated=valid_data, claim=tokens[1])
     return valid_data
         
 # @router.post("/new-totp", response_model=schemas.NewTOTP)
@@ -180,39 +203,6 @@ async def update_current_user(
 #     # Remove the secret ...
 #     obj_in.secret = None
 #     return obj_in
-
-@router.post(
-    "/token", 
-    response_model=AccessToken,
-    response_description="Generate a new JWT token"    
-)
-async def signin_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()], 
-    collection: Collection = Depends(get_user_db)
-):
-    """
-    Generate only a JWT access token 
-    """
-    valid_username = form_data.username.lower()
-    user: FunctionStatus = authenticate_user(valid_username, form_data.password)
-    if not user.status:
-        raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Login failed; incorrect email or password"
-            ) 
-    id = user.content.get('_id')
-    access_token = security.create_access_token(subject=id)
-    try:
-        data = collection.update_one(
-            {"_id": id}, {"$set": {"accessToken": access_token, "updatedAt": datetime.now()}})
-    except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
-        print(error_handler)
-        raise mssg
-    if not data.acknowledged:
-        raise mssg
-    responce = {"id" : str(id), "accessToken": access_token, "tokenType": "bearer"}
-    return responce
 
 
 @router.post(
@@ -313,6 +303,16 @@ def claim_email(
             functionName="claim_email", status=False, section=1, message=error)
         print(error_handler)
         raise mssg
+    # Test the claims
+    test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
+    if (
+        (token_user.sub == magic_token.sub)
+        or (token_user.fingerprint != magic_token.fingerprint)
+        or (user == None)
+        or (user.get('disabled'))
+    ):
+        raise test_mssg
+    id = user.get('_id')
     # Check if email is already validated
     if user.get('emailValidated'):
         raise HTTPException(
@@ -320,17 +320,6 @@ def claim_email(
                 detail='Email is already verify',
                 headers={"WWW-Authenticate": "Bearer"}
             )
-    # Test the claims
-    id = user.get('_id')
-    test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
-    if (
-        (token_user.sub == magic_token.sub)
-        or (token_user.fingerprint != magic_token.fingerprint)
-        or (user == None)
-        or (user.get('disabled'))
-        or (user.get('deleted'))
-    ):
-        raise test_mssg
     try: 
         email_db: dict = email_collection.find_one({"foreignId": user.get('_id')})
     except Exception as error:

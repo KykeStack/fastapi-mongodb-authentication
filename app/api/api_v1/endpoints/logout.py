@@ -32,9 +32,10 @@ def revoke_token(
     collection: Collection = Depends(get_user_db)
 ) -> Any:
     """
-    Revoke a access token
+    Revoke access token
     """
     if not current_user.status:
+        print(current_user.message)
         if current_user.section == 1:
             raise mssg
         raise HTTPException(
