@@ -114,12 +114,6 @@ curl -X 'POST' \
   -H 'accept: application/json' \
   -d ''
 ```
-```json
-{
-  "email": "example@example.com"
-}
-```
-
 - Verify a magic link and authenticate the user: Send a GET request to /magic-link/verify?token=<magic_link_token>. 
     - This is going to be assembled into the server host, the host will receive a claim and the user a bearer JWT Token, both are taken from the server host and sent to the API
 The user will be authenticated and a JWT token will be returned. Example:
@@ -162,7 +156,7 @@ The user will be authenticated and a JWT token will be returned. Example:
 
 
 # Emails
-- EMAILS_ENABLED = true? on .env. Provide the necessary information of your SMTP provider
+- EMAILS_ENABLED = true? on .env. Supply the necessary information of your SMTP provider
 
 - The API sends:
     - New account created
@@ -173,8 +167,6 @@ The user will be authenticated and a JWT token will be returned. Example:
     - Delete User account
 
 # fastapi-mongodb-auth Environment Variables
-
-This markdown file explains the environment variables used in the `fastapi-mongodb-auth` API.
 
 ## Authentication and Tokens
 
