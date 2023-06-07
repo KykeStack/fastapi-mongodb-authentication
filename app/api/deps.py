@@ -53,7 +53,7 @@ def authenticate_user(current_user: str, password: str, admin: Optional[bool] = 
     if admin:
         collection = session['Admin']
     else:
-        collection = session.User
+        collection = session['User']
     try:
         form_user: dict = collection.find_one({'email': current_user})
     except Exception as error:
@@ -81,9 +81,9 @@ def authenticate_user(current_user: str, password: str, admin: Optional[bool] = 
         return error_handler
     return FunctionStatus(status=True, content=form_user)
 
-def get_user(by_id: str, admin: Optional[bool] = False) -> FunctionStatus:
+def get_user(by_id: str, admin: bool) -> FunctionStatus:
     if not admin:
-        collection = session.User
+        collection = session['User']
     else: 
         collection = session['Admin']
     try:
@@ -111,7 +111,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Fun
             print(error_handler)
             return error_handler
         token_data = TokenData(userId=user_id)
-        print(payload)
         from_get_user: FunctionStatus = get_user(by_id=token_data.userId, admin=payload.get('admin'))
         if not from_get_user.status:
             error_handler = FunctionStatus(
@@ -119,8 +118,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Fun
             print(error_handler)
             return error_handler
         user = from_get_user.content
-        print(user.get('accessToken'))
-        print(token)
         if user.get('accessToken') != token:
             error_handler = FunctionStatus(
                 functionName='get_current_user', status=False, section=2, message=f"JWT Token is deprecated")
@@ -128,7 +125,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Fun
             return error_handler
     except JWTError as error:
         return FunctionStatus(status=False, section=3, message=f"JWTError: {error}")
-    return FunctionStatus(status=True, content=user)
+    return FunctionStatus(status=True, content=user, metadata=payload)
 
 async def get_current_active_user(current_user: Annotated[FunctionStatus, Depends(get_current_user)]) -> FunctionStatus:
     if not current_user.status:
@@ -141,6 +138,12 @@ async def get_current_active_user(current_user: Annotated[FunctionStatus, Depend
     if user.get('deleted'):
         return FunctionStatus(
             functionName='get_current_active_user', status=False, section=2, message=f"User not found")
+    is_admin = current_user.metadata
+    if is_admin.get('admin'):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
     return  FunctionStatus(status=True, content=user)
 
 
@@ -167,7 +170,7 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
 
 
 def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
-    collection = session.User
+    collection = session['User']
     token_data = get_token_payload(token)
     if not token_data.refresh:
         return FunctionStatus(status=False, section=0, message="Could not validate credentials")
@@ -186,7 +189,7 @@ def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     return FunctionStatus(status=True, content=form_user)
 
 def get_access_token(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
-    collection: Collection = session.User
+    collection: Collection = session['User']
     token_data = get_token_payload(token)
     if token_data.refresh:
         return FunctionStatus(
@@ -214,6 +217,12 @@ def get_current_active_superuser(
 ) -> FunctionStatus:
     if not current_user.status:
         return FunctionStatus(functionName="get_current_active_superuse", status=False)
+    is_admin = current_user.metadata 
+    if not is_admin.get('admin'):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
     return current_user
 
 # ----------------------------------------------------------------------------------------------------------------------------------
