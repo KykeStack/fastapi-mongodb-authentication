@@ -85,19 +85,19 @@ Before you start, make sure you have the following prerequisites installed on yo
 ```
     - This route has a series of optional fields, in case extra user information is required:
 ```json  
-{
-  "fullName": {
-    "name": "string",
-    "secondName": "string",
-    "surname": "string",
-    "secondSurname": "string"
-  },
-  "birthdate": "string",
-  "gender": "not_given",
-  "country": "string",
-  "phoneNumber": "string",
-  "userExperience": true
-}
+ {
+   "fullName": {
+     "name": "string",
+     "secondName": "string",
+     "surname": "string",
+     "secondSurname": "string"
+   },
+   "birthdate": "string",
+   "gender": "not_given",
+   "country": "string",
+   "phoneNumber": "string",
+   "userExperience": true
+ }
 ```  
 - Login with email and password: Send a POST request to /login with the following JSON payload:
 ```curl
@@ -114,14 +114,8 @@ curl -X 'POST' \
   -H 'accept: application/json' \
   -d ''
 ```
-```json
-{
-  "email": "example@example.com"
-}
-```
-
 - Verify a magic link and authenticate the user: Send a GET request to /magic-link/verify?token=<magic_link_token>. 
-    - This is going to be assembled into the server host, the host will receive a claim and the user a bearer JWT Token, both are taken to the server host and sent to the API
+    - This is going to be assembled into the server host, the host will receive a claim and the user a bearer JWT Token, both are taken from the server host and sent to the API
 The user will be authenticated and a JWT token will be returned. Example:
 ```curl
 curl -X 'POST' \
@@ -162,7 +156,7 @@ The user will be authenticated and a JWT token will be returned. Example:
 
 
 # Emails
-- EMAILS_ENABLED = true? on .env. Provide the necessary information of your SMTP provider
+- EMAILS_ENABLED = true? on .env. Supply the necessary information of your SMTP provider
 
 - The API sends:
     - New account created
@@ -173,8 +167,6 @@ The user will be authenticated and a JWT token will be returned. Example:
     - Delete User account
 
 # fastapi-mongodb-auth Environment Variables
-
-This markdown file explains the environment variables used in the `fastapi-mongodb-auth` API.
 
 ## Authentication and Tokens
 
