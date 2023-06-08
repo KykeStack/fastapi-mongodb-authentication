@@ -12,3 +12,6 @@ class EnableTOTP(BaseModel):
     claim: str
     uri: str
     password: Optional[str] = None
+    
+if __name__ == "__main__":
+    ...

@@ -67,4 +67,6 @@ def verify_totp(*, token: str, secret: str, last_counter: int = None) -> Union[s
         return False
     else:
         return match.counter
-
+    
+if __name__ == "__main__":
+    ...

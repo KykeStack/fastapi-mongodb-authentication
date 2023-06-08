@@ -31,3 +31,5 @@ class UserAndEmai(BaseModel):
     userUpdated: UserOut
     claim: str
         
+if __name__ == "__main__":
+    ...

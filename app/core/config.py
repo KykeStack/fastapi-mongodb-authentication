@@ -47,3 +47,6 @@ class Settings(BaseSettings):
         env_file = "../.env"
 
 settings = Settings()
+
+if __name__ == "__main__":
+    ...

@@ -25,13 +25,49 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")  
 
-def get_db() -> Union[Collection, Database]:
+def get_user_db() -> Union[Collection, Database]:
     try:
         collection = session['User']
         yield collection
     finally:
         session
+        
+def get_email_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Email']
+        yield collection
+    finally:
+        session
 
+def get_delete_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Delete']
+        yield collection
+    finally:
+        session
+        
+def get_magic_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Magic']
+        yield collection
+    finally:
+        session
+
+def get_password_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Password']
+        yield collection
+    finally:
+        session
+
+
+def get_admin_db() -> Union[Collection, Database]:
+    try:
+        collection = session['Admin']
+        yield collection
+    finally:
+        session
+        
 def verify_password(*, plain_password: str, hashed_password: str) -> FunctionStatus:
     try:
         is_valid_password = pwd_context.verify(plain_password, hashed_password)
@@ -171,9 +207,9 @@ def get_refresh_user(token: str = Depends(reusable_oauth2)) -> FunctionStatus:
     except Exception as e:
         return FunctionStatus(status=False, section=1, message=f"Mongodb error: {e}")
     if form_user == None:
-        return FunctionStatus(status=False, section=3, message="User not found")
+        return FunctionStatus(status=False, section=2, message="User not found")
     if token != form_user.get('refreshToken'):
-        return FunctionStatus(status=False, section=2, message="Could not validate credentials")
+        return FunctionStatus(status=False, section=3, message="Could not validate credentials")
     if form_user.get('disabled'):
         return FunctionStatus(status=False, section=4, message="Inactive user")
     return FunctionStatus(status=True, content=form_user)
@@ -264,4 +300,6 @@ def get_current_active_superuser(
 #         if form_user == None:
 #             raise HTTPException(status_code=404, detail="User not found")
 #         return {"status": True, "content" : form_user}
-    
+
+if __name__ == "__main__":
+    ...

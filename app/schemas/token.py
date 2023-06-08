@@ -53,3 +53,6 @@ class AccessToken(BaseModel):
     
 class TokenData(BaseModel):
     userId: Optional[str] = None
+    
+if __name__ == "__main__":
+    ...

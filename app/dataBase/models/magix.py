@@ -22,6 +22,10 @@ class MagicData(BaseModel):
     createdAt: datetime = datetime.now()
     claimToken: Optional[str] = None
     
+    
 class UpdateMagicData(BaseModel):
     updatedAt: datetime
     claimToken: Optional[str] = None
+    
+if __name__ == "__main__":
+    ...

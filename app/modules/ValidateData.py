@@ -27,3 +27,6 @@ def validate_data(current_data: dict, new_data: dict):
                 
         else: validated_data[keys] = values
     return FunctionStatus(status=True, content=validated_data)
+
+if __name__ == "__main__":
+    ...

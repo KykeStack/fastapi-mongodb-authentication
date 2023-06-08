@@ -67,3 +67,6 @@ class UpdateUser(BaseModel):
     totpCounter: Optional[str] = None
     disabled: Optional[bool]= None
     deleted: Optional[bool]= None
+
+if __name__ == "__main__":
+    ...

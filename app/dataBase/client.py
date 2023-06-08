@@ -27,5 +27,5 @@ class Client:
 session: Database = Client(settings.MONGODB_URL).connect_to_database()[settings.DATABASE_NAME]
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ...

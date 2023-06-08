@@ -159,3 +159,6 @@ def send_delete_account_email(data: EmailValidation) -> None:
             "link": link,
         },
     )
+
+if __name__ == "__main__":
+    ...

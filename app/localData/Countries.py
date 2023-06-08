@@ -58,5 +58,5 @@ COUNTRIES: list[str] = ['Aruba', 'Afghanistan', 'Angola',
  'Virgin Islands, U.S.', 'Viet Nam', 'Vanuatu', 'Wallis and Futuna', 'Samoa', 'Yemen', 
  'South Africa', 'Zambia', 'Zimbabwe']
 
-if __name__ == '__main__':
-    pass
+if __name__ == "__main__":
+    ...

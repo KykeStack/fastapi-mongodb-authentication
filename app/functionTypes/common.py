@@ -9,3 +9,6 @@ class FunctionStatus(BaseModel):
     content: Optional[Any] = None
     metadata: Optional[Any] = None
     error: Optional[Any] = None
+    
+if __name__ == "__main__":
+    ...

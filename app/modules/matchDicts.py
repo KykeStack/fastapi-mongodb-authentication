@@ -24,3 +24,6 @@ def matchDicts(dict_base: dict, dict_to_compare: dict):
         found_match_dict[k] = v #   CHANGE[k][uk] = uv
         
   return found_match_dict
+
+if __name__ == "__main__":
+    ...
