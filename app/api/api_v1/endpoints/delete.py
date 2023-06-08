@@ -5,21 +5,18 @@ from schemas.emails import EmailValidation
 from fastapi import APIRouter, HTTPException, status, Depends
 
 from functionTypes.common import FunctionStatus
-from modules.ValidateData import validate_data
-from typing import Union
-
 from typing import Annotated, Any
+
 from bson.objectid import ObjectId
 from pymongo.collection import Collection
-from pymongo.database import Database
-
 from schemas.token import MagicTokenPayload
 
-from dataBase.client import session
 from core.config import settings
 
 from core import security
-from api.deps import get_current_active_user, get_magic_token
+from crud.tokens import set_db_tokens, verify_token
+from crud.user import delete_user, find_one_document
+from api.deps import get_current_active_user, get_magic_token, get_user_db, get_delete_db
 from utils.emailsMessage import send_delete_account_email
 
 router = APIRouter()
@@ -28,22 +25,6 @@ mssg = HTTPException(
             detail="Login failed"
         )
 
-
-def get_user_db() -> Union[Collection, Database]:
-    try:
-        collection = session['User']
-        yield collection
-    finally:
-        session
-
-def get_delete_db() -> Union[Collection, Database]:
-    try:
-        collection = session['Delete']
-        yield collection
-    finally:
-        session
-
-
 @router.post(
     "/users/me", 
     response_model=WebToken,  
@@ -51,9 +32,9 @@ def get_delete_db() -> Union[Collection, Database]:
     response_description= "Delete current User",
     response_model_exclude_none=True
 )
-async def delete_user(
+async def delete_user_db(
     current_user: Annotated[FunctionStatus, Depends(get_current_active_user)],
-    collection: Collection = Depends(get_user_db)
+    collection: Collection = Depends(get_delete_db)
 ):
     """
     Delete user account
@@ -69,15 +50,9 @@ async def delete_user(
             )
     user = current_user.content
     id = user.get('_id')
-    try: 
-        user: dict = collection.update_one({'_id': id}, {'delete'})
-    except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="delete_user", status=False, section=1, message=error)
-        print(error_handler)
-        raise mssg
-    tokens = security.create_magic_tokens(subject=id) 
     user_email = user.get('email')
+    tokens = security.create_magic_tokens(subject=id) 
+    set_db_tokens(collection=collection, token=tokens[1], id=id)
     if settings.EMAILS_ENABLED:
         # Send email with user.email as subject
         data = EmailValidation(email=user_email, subject=user.get('username'), token=tokens[0])
@@ -86,7 +61,7 @@ async def delete_user(
 
 
 @router.post(
-    "/users/me/confirm", 
+    "/me/confirm", 
     response_model=Msg,  
     response_model_exclude_unset = True,
     response_description= "Confirm delete user ",
@@ -95,8 +70,9 @@ async def delete_user(
 def confirm_delete_user(
     *,
     obj_in: WebToken,
+    magic_in: FunctionStatus = Depends(get_magic_token),
     collection: Collection = Depends(get_user_db),
-    magic_in: FunctionStatus = Depends(get_magic_token)
+    delete_collection: Collection = Depends(get_delete_db)
 ) -> Any:
     """
     Second step of a 'delete user account'.
@@ -110,40 +86,21 @@ def confirm_delete_user(
     token_user: MagicTokenPayload = magic_in.content
     magic_token: MagicTokenPayload = claim_in.content
     #Get the user
-    try: 
-        user: dict = collection.find_one(ObjectId(token_user.sub))
-    except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="claim_email", status=False, section=1, message=error)
-        print(error_handler)
-        raise mssg
+    user = find_one_document(collection=collection, query=ObjectId(token_user.sub))
     # Test the claims
-    test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
+    id = user.get('_id')
+    test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim..")
     if (
         (token_user.sub == magic_token.sub)
         or (token_user.fingerprint != magic_token.fingerprint)
-        or (user == None)
         or (user.get('disabled'))
     ):
         raise test_mssg
-    id = user.get('_id')
-    try:
-        data_user = collection.delete_one({"_id": id})
-    except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="claim_email", status=False, section=3, message=error)
-        print(error_handler)
-        raise mssg
-    if not data_user.acknowledged:
-        raise mssg
+     # Verify if Toke is already claim
+    verify_token(collection=delete_collection, id=id, claim=obj_in.claim)
+    # Delete the user from db
+    delete_user(collection=collection, id=id)
     return {"msg": "Account deleted successfully."}
-
-@router.get("/tester", response_model=Msg)
-def test_endpoint() -> Any:
-    """
-    Test current endpoint.
-    """
-    return {"msg": "Message returned ok."}
 
 if __name__ == "__main__":
     ...

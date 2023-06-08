@@ -16,9 +16,5 @@ def send_email(*, data: EmailContent) -> Any:
     send_web_contact_email(data=data)
     return {"msg": "Web contact email sent"}
 
-@router.get("/tester", response_model=Msg)
-def test_endpoint() -> Any:
-    """
-    Test current endpoint.
-    """
-    return {"msg": "Message returned ok."}
+if __name__ == "__main__":
+    ...

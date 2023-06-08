@@ -1,31 +1,22 @@
 from schemas.user import SignUpFormIn, SignUpFormOut
 from functionTypes.common import FunctionStatus
 from dataBase.models.user import CreateUser
-from schemas.msg import Msg
 
 from localData.Countries import COUNTRIES
 
 from fastapi import APIRouter, HTTPException, status, Depends
-from typing import Union, Any
 
+from crud.user import unique_email_username
 from fastapi.encoders import jsonable_encoder
-from api.deps import get_password_hash
+from api.deps import get_password_hash, get_user_db
 from utils.emailsMessage import send_new_account_email
 
-from dataBase.client import session 
 from core.config import settings
 
 from pymongo.collection import Collection
-from pymongo.database import Database
+
 
 router = APIRouter()
-
-def get_user_db() -> Union[Collection, Database]:
-    try:
-        collection = session['User']
-        yield collection
-    finally:
-        session
         
 @router.get(
     "/countries", 
@@ -62,32 +53,11 @@ async def create_user(form: SignUpFormIn, collection: Collection = Depends(get_u
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service Unavailable"
             )
-    try:
-        find_email = collection.find_one({"email": form.email})
-    except Exception as error:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
-        print(error_handler)
-        raise mssg
-    if find_email != None:
-        raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="email already exists"
-            )
-    try: 
-        find_username = collection.find_one({"username" : form.username})
-    except Exception as error:
-        error_handler = FunctionStatus(status=False, section=1, message=error)
-        print(error_handler)
-        raise mssg
-    if find_username != None:
-        raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="username already exists"
-            )
+    unique_email_username(collection=collection, email=form.email, username=form.username)
     encrypted_password = get_password_hash(form.password)
     form.password = encrypted_password.content
     if not encrypted_password.status:
-        error_handler = FunctionStatus(status=False, section=0, message=error)
+        error_handler = FunctionStatus(status=False, section=1, message=error)
         print(error_handler)
         raise mssg
     signup_form = CreateUser(**form.dict())  
@@ -95,23 +65,15 @@ async def create_user(form: SignUpFormIn, collection: Collection = Depends(get_u
     try:
         responce = collection.insert_one(content)
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=1, message=error)
+        error_handler = FunctionStatus(status=False, section=2, message=error)
         print(error_handler)
         raise mssg
     if not responce.acknowledged:
         raise mssg
     content.update({'id': str(responce.inserted_id)})
-    if settings.EMAILS_ENABLED and form.email:
+    if settings.EMAILS_ENABLED:
         send_new_account_email(email_to=form.email, username=form.username, password=form.password)
     return content
-
-@router.get("/tester", response_model=Msg)
-def test_endpoint() -> Any:
-    """
-    Test current endpoint.
-    """
-    return {"msg": "Message returned ok."}
-
 
 if __name__ == "__main__":
     ...
