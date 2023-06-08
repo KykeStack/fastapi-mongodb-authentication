@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from api.api_v1.endpoints.internal import admin
 from api.api_v1.endpoints import (
     signin,
     signup,
@@ -6,9 +7,9 @@ from api.api_v1.endpoints import (
     logout,
     delete,
     services, 
-    proxy,
-    admin
+    proxy
 )
+
 
 api_router = APIRouter()
 api_router.include_router(login.router, prefix="/login", tags=["Login"])
@@ -23,3 +24,5 @@ api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 api_router.include_router(signin.router, prefix="/signin", tags=["Signin"])
 api_router.include_router(signup.router, prefix = "/signup", tags = ["Signup"])
 
+if __name__ == "__main__":
+    ...
