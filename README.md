@@ -1,13 +1,12 @@
 # fastapi-mongodb-auth
 
-<img src="https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png" alt="FastAPI Logo" height="100">
-<img src="https://webassets.mongodb.com/_com_assets/cms/mongodb_logo1-76twgcu2dm.png" alt="MongoDB Logo" height="100">
-
 fastapi-mongodb-auth is a powerful authentication service built with FastAPI and MongoDB, designed to handle user authentication using email and password, as well as magic links for seamless login experiences.
 
 This project is inspired in the Fastapi generator project:
 - https://github.com/whythawk/full-stack-fastapi-postgresql.git
 
+<img src="https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png" alt="FastAPI Logo" height="100">
+<img src="https://webassets.mongodb.com/_com_assets/cms/mongodb_logo1-76twgcu2dm.png" alt="MongoDB Logo" height="100">
 ## Features
 
 - User registration with email and password
