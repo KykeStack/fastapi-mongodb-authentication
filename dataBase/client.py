@@ -1,8 +1,9 @@
 from pymongo.mongo_client import MongoClient
 from pymongo.database import Database
 from pymongo.server_api import ServerApi
-from core.config import settings
 from utils.bcolors import Colors
+
+from core.config import settings
 
 class Client:
     def __init__(self, uri: str) -> None:
