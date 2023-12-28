@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         raise ValueError(v)
     
     class Config:
-        env_file = "../.env"
+        env_file = "./.env"
 
 settings = Settings()
 
