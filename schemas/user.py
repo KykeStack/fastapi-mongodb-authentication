@@ -2,55 +2,8 @@ from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Annotated, Optional
 from enum import Enum
 
-from localData.Countries import COUNTRIES
 from datetime import datetime
-
-import phonenumbers
-
-def validate_names(name):
-    if name != None:
-        if len(name) > 25:
-            raise ValueError(f"Invalid Length of name {name}")
-        validate_name = name.capitalize()
-        return validate_name
-
-def validate_country(country):
-    try:
-        if country in COUNTRIES:
-            index : int = COUNTRIES.index(country)
-            return COUNTRIES[index]
-        else:
-            raise ValueError(f"Country name: {country}, not Found")
-    except Exception as e:
-        raise e
-    
-def validate_birthdate(date):
-        valid_formats : list[str] = [
-            '%d/%m/%Y', '%d-%m-%Y', '%Y/%d/%m', '%Y-%d-%m', '%d %B, %Y']
-        for format in valid_formats:
-            try:
-                return str(datetime.strptime(date, format).date())
-            except Exception:
-                pass
-        raise ValueError(f"Invalid birthdate: {date}. List of valid formats:{valid_formats}")
-    
-def validate_phonenumber(phonenumber):
-    if phonenumber is not None:
-        try:
-            parsed = phonenumbers.parse(phonenumber)
-            if phonenumbers.is_valid_number(parsed):
-                joined_phonenumber = phonenumber.replace(" ", "")
-                return joined_phonenumber
-            else:
-                raise ValueError(f"Invalid phone number: {phonenumber}")
-        except Exception as e:
-            raise ValueError(e)
-    
-def validate_username(username):
-    assert username.isalnum(), 'must be alphanumeric'
-    validate_username = username.capitalize()
-    return validate_username
-
+from validators.users import UsersValidator
 
 class Gender(str, Enum):
     not_given = 'not_given'
@@ -66,20 +19,19 @@ class FullName(BaseModel):
     
     @validator("name")
     def lower_name(cls, value):
-        return validate_names(value)
+        return UsersValidator.validate_names(value)
         
     @validator("secondName")
     def lower_secondName(cls, value):
-        return validate_names(value)
+        return UsersValidator.validate_names(value)
 
     @validator("surname")
     def lower_surname(cls, value: str):
-        return validate_names(value)
+        return UsersValidator.validate_names(value)
 
     @validator("secondSurname")
     def lower_secondSurname(cls, value: str):
-        return validate_names(value)
-
+        return UsersValidator.validate_names(value)
 
 class OptionalFullName(FullName):
     name: Optional[str]
@@ -132,19 +84,19 @@ class SignUpFormIn(BaseModel):
 
     @validator("country")
     def parse_country(cls, value):
-        return validate_country(value)
+        return UsersValidator.validate_country(value)
 
     @validator("phoneNumber")
     def parse_phone_number(cls, value):
-        return validate_phonenumber(value)
+        return UsersValidator.validate_phonenumber(value)
     
     @validator("birthdate")
     def parse_birthdate(cls, value):
-        return validate_birthdate(value)
+        return UsersValidator.validate_birthdate(value)
     
     @validator('username')
     def username_alphanumeric(cls, value):
-        return validate_username(value)
+        return UsersValidator.validate_username(value)
 
 class SignUpFormOut(BaseModel):  
     id: Optional[str] = None
@@ -179,7 +131,7 @@ class UpdateUserData(BaseModel):
     @validator("country")
     def parse_country(cls, value):
         return validate_country(value)
-         
+    
     @validator("phoneNumber")
     def parse_phone_number(cls, value):
         return validate_phonenumber(value)
