@@ -1,0 +1,13 @@
+services:
+  server:
+    build:
+      context: .
+    ports:
+      - 8000:8000
+    env_file:
+      - .env
+    volumes:
+      - fastapi-mongodb-auth:/app
+
+volumes:
+  fastapi-mongodb-auth:
