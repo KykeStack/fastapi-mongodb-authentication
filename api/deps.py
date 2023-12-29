@@ -74,8 +74,10 @@ def verify_password(*, plain_password: str, hashed_password: str) -> FunctionSta
     except Exception as error:
         print(error)
         return FunctionStatus(status=False, section=0, message=f"CryptContext error: {error}")
+    
     if not is_valid_password:
         return FunctionStatus(status=False, section=1, message="Invalid user password")
+    
     return FunctionStatus(status=True, content=is_valid_password)
 
 def get_password_hash(password: str) -> FunctionStatus:
@@ -245,61 +247,6 @@ def get_current_active_superuser(
             detail="Could not validate credentials",
         )
     return current_user
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# def get_active_websocket_user(*, db: Session, token: str) -> models.User:
-#     try:
-#         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
-#         token_data = schemas.TokenPayload(**payload)
-#     except (jwt.JWTError, ValidationError):
-#         raise ValidationError("Could not validate credentials")
-#     if token_data.refresh:
-#         # Refresh token is not a valid access token
-#         raise ValidationError("Could not validate credentials")
-#     user = crud.user.get(db, id=token_data.sub)
-#     if not user:
-#         raise ValidationError("User not found")
-#     if not crud.user.is_active(user):
-#         raise ValidationError("Inactive user")
-#     return user
-
-# async def get_current_user(
-#     collection: Collection = Depends(get_db), 
-#     token: str = Depends(reusable_oauth2)
-#     ) -> FunctionStatus:
-#     token_data = get_token_payload(token)
-#     if token_data.refresh or token_data.totp:
-#         # Refresh token is not a valid access token and TOTP True can only be used to validate TOTP
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Could not validate credentials",
-#         )
-#     try:
-#         form_user: dict = collection.find_one(ObjectId(token_data.sub))
-#     except Exception as e:
-#         return FunctionStatus({"status": False, "section": 0, "message": f"Mongodb error: {e}"})
-#     finally:
-#         if form_user == None:
-#             raise HTTPException(status_code=404, detail="User not found")
-#         return FunctionStatus(status=True, content=form_user)
-    
-    
-# def get_totp_user(collection: Collection = Depends(get_db), token: str = Depends(reusable_oauth2)) -> FunctionReturn:
-#     toke n_data = get_token_payload(token)
-#     if token_data.refresh or not token_data.totp:
-#         # Refresh token is not a valid access token and TOTP False cannot be used to validate TOTP
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Could not validate credentials",
-#         )
-#     try:
-#         form_user: dict = collection.find_one(ObjectId(token_data.sub))
-#     except Exception as e:
-#         return FunctionStatus({"status": False, "section": 0, "message": f"Mongodb error: {e}"})
-#     finally:
-#         if form_user == None:
-#             raise HTTPException(status_code=404, detail="User not found")
-#         return {"status": True, "content" : form_user}
 
 if __name__ == "__main__":
     ...
