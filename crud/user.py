@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from datetime import datetime
 from typing import Union, Optional
 
-test_mssg = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation Fail: Could not complete successfully")
+NOT_FOUND_MESSAGE = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation Fail: Could not complete successfully")
 
 def verify_email(
     *,
@@ -18,12 +18,11 @@ def verify_email(
     try:
         found_user_email: dict = collection.find_one({"email": email})
     except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="verify_email", status=False, section=0, message=error)
-        print(error_handler)
         raise mssg
-    if found_user_email == None:
+    
+    if not found_user_email:
         raise mssg
+    
     if str(found_user_email.get('_id')) != str(id):
         raise mssg
     
@@ -40,33 +39,14 @@ def update_user(
         data.update({"updatedAt": updated_at})
         responce = collection.update_one({"_id": id}, {"$set": data})
     except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="update_user", status=False, section=0, message=error)
-        print(error_handler)
-        raise test_mssg
+        raise NOT_FOUND_MESSAGE
+    
     if not responce.acknowledged:
-        error_handler = FunctionStatus(
-            functionName="update_user", 
-            status=False, 
-            section=1,
-            message=f"Error: acknowledged -> {responce.acknowledged}"
-        )
-        print(error_handler)
-        raise test_mssg
-    if responce.matched_count == 0:
-        error_handler = FunctionStatus(
-            functionName="update_user", status=False, section=2, message="No modify User")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    if responce.modified_count == 0:
-        if messge:
-            raise HTTPException(
-                status_code=status_code,
-                detail=messge
-            )
-        raise test_mssg
+        raise NOT_FOUND_MESSAGE
+    
+    if responce.matched_count == 0 or responce.modified_count == 0:
+        raise NOT_FOUND_MESSAGE
+        
     return updated_at
 
 def delete_user(
@@ -77,17 +57,10 @@ def delete_user(
     try:
         responce = collection.delete_one({"_id": id})
     except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="delete_user", status=False, section=3, message=error)
-        print(error_handler)
-        raise test_mssg
-    if not responce.acknowledged:
-        error_handler = FunctionStatus(
-            functionName="update_user", status=False, section=3, 
-            message=f"Error: acknowledged {responce.acknowledged}")
-        print(error_handler)
-        raise test_mssg
+        raise NOT_FOUND_MESSAGE
     
+    if not responce.acknowledged:
+        raise NOT_FOUND_MESSAGE
     
 def find_one_document(
     *,
@@ -98,12 +71,11 @@ def find_one_document(
     try:
         responce = collection.find_one(query)
     except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="find_one_document", status=False, section=0, message=error)
-        print(error_handler)
-        raise test_mssg
-    if responce == None and not return_value:
-        raise test_mssg
+        raise NOT_FOUND_MESSAGE
+    
+    if not responce and not return_value:
+        raise NOT_FOUND_MESSAGE
+    
     return responce
 
 def unique_email_username(
@@ -116,20 +88,16 @@ def unique_email_username(
         found_documents = collection.find({
             "$or": [ {"email": email}, {"username": username}]}, {"username": 1, "email": 1 })
     except Exception as error:
-        error_handler = FunctionStatus(
-            functionName="unique_email_username", status=False, section=0, message=error)
-        print(error_handler)
-        raise test_mssg
-    if found_documents != None:
+        raise NOT_FOUND_MESSAGE
+    
+    if found_documents:
         for documents in found_documents:
-            if documents.get('email') == email:
-                match = "email already exists"
-            if documents.get('username') == username:
-                match = "username already exists"
-            raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=match
-                )
+            if (documents.get('email') == email
+                ) or documents.get('username') == username:
+                raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail= "username or email already exists"
+                    )
 
 if __name__ == "__main__":
     ...
