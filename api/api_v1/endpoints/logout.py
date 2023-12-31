@@ -25,17 +25,17 @@ def revoke_token(
     Revoke access token
     """
     if not current_user.status:
-        print(current_user.message)
-        if current_user.section == 1:
-            raise mssg
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=current_user.message,
         )
+        
     user = current_user.content
-    id = user.get('_id')
-    data = {"accessToken": "", "refreshToken": ""}
-    update_user(collection=collection, id=id, data=data)
+    update_user(
+            collection=collection, 
+            id=user.get('_id'), 
+            data={"accessToken": "", "refreshToken": ""}
+        )
     return {"msg": "Token revoked"}
 
 if __name__ == "__main__":
