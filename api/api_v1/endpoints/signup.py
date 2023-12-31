@@ -15,9 +15,10 @@ from core.config import settings
 
 from pymongo.collection import Collection
 
+UNAUTHORIZED_MESSAGE = HTTPException(status_code=401, detail="Could not Validate Credentials")
 
 router = APIRouter()
-        
+
 @router.get(
     "/countries", 
     status_code = status.HTTP_200_OK, 
@@ -28,8 +29,7 @@ async def list_of_countries():
     Get list of available countries 
     """
     try:
-        requested = {"countries": COUNTRIES}
-        return jsonable_encoder(requested)
+        return jsonable_encoder({"countries": COUNTRIES})
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
@@ -49,27 +49,23 @@ async def create_user(form: SignUpFormIn, collection: Collection = Depends(get_u
     """
     Create new user without the need to be logged in.
     """
-    mssg = HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Service Unavailable"
-            )
     unique_email_username(collection=collection, email=form.email, username=form.username)
     encrypted_password = get_password_hash(form.password)
     form.password = encrypted_password.content
+    
     if not encrypted_password.status:
-        error_handler = FunctionStatus(status=False, section=1, message=error)
-        print(error_handler)
-        raise mssg
+        raise UNAUTHORIZED_MESSAGE
+    
     signup_form = CreateUser(**form.dict())  
     content = {**signup_form.dict()}      
     try:
         responce = collection.insert_one(content)
     except Exception as error:
-        error_handler = FunctionStatus(status=False, section=2, message=error)
-        print(error_handler)
-        raise mssg
+        raise UNAUTHORIZED_MESSAGE
+    
     if not responce.acknowledged:
-        raise mssg
+        raise UNAUTHORIZED_MESSAGE
+    
     content.update({'id': str(responce.inserted_id)})
     if settings.EMAILS_ENABLED:
         send_new_account_email(email_to=form.email, username=form.username, password=form.password)
