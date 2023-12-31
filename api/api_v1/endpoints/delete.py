@@ -40,9 +40,6 @@ async def delete_user_db(
     Delete user account
     """
     if not current_user.status:
-        if current_user.section == 0:
-            print(current_user.message)
-            raise mssg
         raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
                 detail='User is inactive',
