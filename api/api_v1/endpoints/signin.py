@@ -23,11 +23,9 @@ from crud.user import unique_email_username
 from api.deps import get_current_active_user, get_magic_token, get_user_db, get_email_db
 from utils.emailsMessage import send_email_validation_email
 
+UNAUTHORIZED_MESSAGE = HTTPException(status_code=401, detail="Could not Validate Credentials")
+
 router = APIRouter()
-mssg = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Login failed: Could not verify credential successfully"
-        )
 
 @router.get(
     "/users/me", 
@@ -42,27 +40,7 @@ async def get_current_user(
     Get current user.
     """
     if not user.status:
-        if user.section == 0:
-            user_message: FunctionStatus = user.message
-            if (
-                (user_message.section == 2)
-                or (user_message.section == 3)
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, 
-                    detail="Invalid JWT token",
-                    headers={"WWW-Authenticate": "Bearer"}
-                )
-            if (
-                (user_message.section == 1)
-                or (user_message.section == 0)
-            ):
-                raise mssg
-        raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail='User is inactive',
-                headers={"WWW-Authenticate": "Bearer"}
-            )
+        raise UNAUTHORIZED_MESSAGE
     return user.content
 
 
@@ -84,17 +62,17 @@ async def update_current_user(
     """
     if not current_user_valid.status:
         print(current_user_valid.message)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Login failed"
-        )  
+        raise UNAUTHORIZED_MESSAGE
+        
     user: dict = current_user_valid.content
     valid_data = form.dict(exclude_none=True)
+    
     if not valid_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Data to update is required"
         )  
+        
     if form.username != None or form.username != None:
         if user.get('username') == form.username:
             raise HTTPException(
@@ -107,19 +85,21 @@ async def update_current_user(
                     detail="A new email is required"
                 )     
         unique_email_username(collection=collection, email=form.email, username=form.username)
+
     data = validate_data(user, valid_data)
     if not data.status:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=data.message
         )
+    
     content: dict = data.content
-    id = user.get('_id')
     send_email = False
+    
     if form.email != None and user.get('emailValidated'):
-        tokens = security.create_magic_tokens(subject=id)
+        tokens = security.create_magic_tokens(subject=user.get('_id'))
         # Set the token on db 
-        set_db_tokens(collection=emails_collection, token=tokens[0], id=id)
+        set_db_tokens(collection=emails_collection, token=tokens[0], id=user.get('_id'))
         if settings.EMAILS_ENABLED:
             usernme = user.get('username')
             if form.username:
@@ -129,29 +109,14 @@ async def update_current_user(
             content.update({'emailValidated': False})
             send_email_validation_email(data=data)
             send_email = True
-    updated = update_user(collection=collection, id=id, data=content)
-    valid_data.update({'id': str(id), 'createdAt': user.get('createdAt'), 'updatedAt' : updated})
+            
+    updated = update_user(collection=collection, id=user.get('_id'), data=content)
+    valid_data.update({'id': str(user.get('_id')), 'createdAt': user.get('createdAt'), 'updatedAt' : updated})
+    
     if send_email:
         return UserAndEmai(userUpdated=valid_data, claim=tokens[1])
+    
     return valid_data
-        
-# @router.post("/new-totp", response_model=schemas.NewTOTP)
-# def request_new_totp(
-#     *,
-#     user: models.User = Depends(get_current_active_user),
-# ) -> Any:
-#     if not user.status:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Login failed"
-#         )
-#     """
-#     Request new keys to enable TOTP on the user account.
-#     """
-#     obj_in = security.create_new_totp(label=user.email)
-#     # Remove the secret ...
-#     obj_in.secret = None
-#     return obj_in
 
 
 @router.post(
@@ -169,24 +134,19 @@ async def verify_user_email(
     Verify user email after signup
     """
     if not user.status:
-        if user.section == 0:
-            print(user.message)
-            raise mssg
-        raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail='User is inactive',
-                headers={"WWW-Authenticate": "Bearer"}
-            )
+        raise UNAUTHORIZED_MESSAGE
+    
     user = user.content
     if user.get('emailValidated'):
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail='Email is already verify',
-                headers={"WWW-Authenticate": "Bearer"}
+                detail='Email is already verify'
             )
+    
     user_email = user.get('email')
     id = user.get('_id')
     tokens = security.create_magic_tokens(subject=id)
+    
     # Set the claim token on db
     set_db_tokens(collection=collection, token=tokens[1], id=id)
     if settings.EMAILS_ENABLED:
@@ -215,10 +175,8 @@ def claim_email(
     """
     claim_in = get_magic_token(token=obj_in.claim)
     if not claim_in.status or not magic_in.status:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
-        )
+        raise UNAUTHORIZED_MESSAGE
+    
     token_user: MagicTokenPayload = magic_in.content
     magic_token: MagicTokenPayload = claim_in.content
     #Get the user
@@ -227,25 +185,23 @@ def claim_email(
     if user.get('emailValidated'):
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail='Email is already verify',
-                headers={"WWW-Authenticate": "Bearer"}
+                detail='Email is already verify'
             )
+        
     # Test the claims
-    id = user.get('_id')
-    test_mssg = HTTPException(status_code=400, detail="Login failed; invalid claim.")
     if (
         (token_user.sub == magic_token.sub)
         or (token_user.fingerprint != magic_token.fingerprint)
         or (user.get('disabled'))
     ):
-        raise test_mssg
+        raise UNAUTHORIZED_MESSAGE
     # Verify if Toke is already claim
-    verify_token(collection=email_collection, id=id, claim=obj_in.claim)
+    verify_token(collection=email_collection, id=user.get('_id'), claim=obj_in.claim)
     # Update user tokens
     data = {"emailValidated": True}
-    update_user(collection=collection, id=id, data=data)
+    update_user(collection=collection, id=user.get('_id'), data=data)
     # Deprecate claim token
-    set_db_tokens(collection=email_collection, token='', id=id)
+    set_db_tokens(collection=email_collection, token='', id=user.get('_id'))
     return {"msg": "Email verify successfully."}
 
 if __name__ == "__main__":
